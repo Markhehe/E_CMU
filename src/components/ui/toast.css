@@ -1,0 +1,76 @@
+/* src/components/ui/toast.css */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999; /* Ensures it stays on top of everything, including modals */
+  pointer-events: none; /* Lets users click through the empty space */
+}
+
+.toast {
+  min-width: 280px;
+  padding: 14px 20px;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: auto; /* Re-enables clicking on the toast itself */
+  animation: slideUp 0.3s ease forwards;
+  border-left: 5px solid;
+}
+
+.toast.success { border-left-color: #28a745; }
+.toast.error { border-left-color: #dc3545; }
+.toast.info { border-left-color: #0d6efd; }
+
+.toast-message {
+  font-size: 0.95rem;
+  color: #333;
+  font-weight: 500;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  color: #999;
+  cursor: pointer;
+  margin-left: 15px;
+}
+
+.toast-close:hover { color: #333; }
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Custom Status Colors (matching StatusBadge CSS variables) */
+.toast.PENDING-PAYMENT { 
+  border-left-color: var(--honey-bronze);
+}
+
+.toast.PROCESSING { 
+  border-left-color: var(--status-processing);
+}
+
+.toast.READY-FOR-PICKUP,
+.toast.CLEARED,
+.toast.success { 
+  border-left-color: var(--status-success); 
+}
+
+.toast.REJECTED,
+.toast.error { 
+  border-left-color: var(--status-danger); 
+}
+
+/* Fallback */
+.toast.default {
+  border-left-color: var(--text-muted);
+}

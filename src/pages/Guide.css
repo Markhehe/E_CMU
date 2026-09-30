@@ -1,0 +1,21 @@
+.guide-page h1 {
+  text-align: center;
+  font-size: 1.6rem;
+  margin-bottom: 2rem;
+}
+
+.guide-columns {
+  display: flex;
+  gap: 4rem;
+}
+
+.guide-columns ul {
+  list-style: disc;
+  padding-left: 1.2rem;
+  margin: 0;
+}
+
+.guide-columns li {
+  margin-bottom: 0.6rem;
+  font-weight: 600;
+}

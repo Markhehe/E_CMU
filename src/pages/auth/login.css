@@ -1,0 +1,285 @@
+/* =========================================
+   LOGIN PAGE WRAPPER
+   ========================================= */
+.login-page {
+  min-height: 100vh;
+  background-color: var(--parchment);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+}
+
+.login-panel {
+  display: flex;
+  width: 100%;
+  max-width: 1100px;
+  min-height: 600px;
+  border-radius: 24px;
+  background-color: var(--surface-white);
+  box-shadow: var(--shadow-card);
+}
+
+/* =========================================
+   LEFT SIDE: CAMPUS BRANDING
+   ========================================= */
+.login-left {
+  flex: 1.3;
+  position: relative;
+  z-index: 1;
+  margin-right: -24px; /* The overlapping effect */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  border-radius: 24px 0 0 24px;
+  overflow: hidden;
+  
+  background-color: var(--imperial-blue);
+  background-image: linear-gradient(rgba(2, 35, 96, 0.75), rgba(2, 35, 96, 0.9)), url('../../assets/malabon-1.jpg');
+  background-size: cover;
+  background-position: center;
+}
+
+.login-left-logo {
+  height: 180px;
+  margin-bottom: var(--space-lg);
+  /* Added drop shadow so the logo pops off the background image */
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3)); 
+}
+
+.login-left-text h3 {
+  color: var(--surface-white);
+  font-family: var(--font-serif-body);
+  font-size: 1.6rem;
+  margin-bottom: var(--space-xs);
+}
+
+.login-left-text p {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 1rem;
+}
+
+/* =========================================
+   RIGHT SIDE: LOGIN FORM
+   ========================================= */
+.login-right {
+  flex: 0.8;
+  position: relative;
+  z-index: 2;
+  background-color: var(--surface-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24px;
+  box-shadow: -10px 0 30px rgba(0,0,0,0.08); /* Casts a shadow onto the left image */
+}
+
+.login-right-content {
+  width: 100%;
+  max-width: 360px;
+  padding: 3rem 2.5rem;
+  text-align: center;
+}
+
+.login-brand {
+  font-family: var(--font-brand);
+  font-size: clamp(2.4rem, 2.8vw, 3rem);
+  color: var(--imperial-blue);
+  margin-top: 0; /* FIXED: invalid "-rem" value */
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-light); /* FIXED: replaced #ccc */
+}
+
+.login-brand span {
+  color: var(--honey-bronze);
+}
+
+.login-right h2 {
+  font-family: var(--font-heading);
+  font-size: clamp(1.4rem, 2.5vw, 1.8rem);
+  color: var(--imperial-blue);
+  margin-bottom: var(--space-xs);
+}
+
+.login-subtext {
+  font-family: var(--font-heading);
+  color: var(--text-muted);
+  margin-bottom: var(--space-lg);
+}
+
+.gold-link {
+  color: var(--honey-bronze);
+  font-weight: 700;
+}
+
+.gold-link:hover {
+  text-decoration: underline;
+}
+
+/* =========================================
+   REUSABLE FORM ELEMENTS (DRY Principle)
+   ========================================= */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-label {
+  text-align: left;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.auth-input {
+  padding: 14px 16px;
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
+}
+
+.auth-input:focus,
+.auth-input:focus-visible {
+  outline: none;
+  border-color: var(--imperial-blue);
+  box-shadow: 0 0 0 3px rgba(2, 35, 96, 0.1); /* Soft glow indicates active field */
+}
+
+.auth-button {
+  background-color: var(--imperial-blue);
+  color: var(--surface-white);
+  font-weight: 700;
+  padding: 14px;
+  border-radius: 999px;
+  font-size: 1rem;
+  margin-top: 0.5rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(2, 35, 96, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.auth-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(2, 35, 96, 0.3);
+  background-color: #032b70; /* Slightly lighter on hover for feedback */
+}
+
+.auth-button:active {
+  transform: translateY(0); /* Button presses down */
+  box-shadow: 0 2px 8px rgba(2, 35, 96, 0.2);
+}
+
+.text-button {
+  background: none;
+  border: none;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+
+.text-button:focus-visible {
+  outline: 2px solid var(--honey-bronze);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+.forgot-link {
+  margin-top: 1.25rem;
+  color: var(--text-muted);
+  transition: color var(--transition-speed);
+}
+
+.forgot-link:hover {
+  color: var(--imperial-blue);
+  text-decoration: underline;
+}
+
+/* =========================================
+   MODAL COMPONENT
+   ========================================= */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px); /* Modern blur effect */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-card {
+  background-color: var(--surface-white);
+  border-radius: var(--radius-md);
+  padding: 2.5rem 3rem;
+  width: 90%;
+  max-width: 420px;
+  position: relative;
+  box-shadow: var(--shadow-card);
+  animation: modalFadeIn 0.3s ease-out forwards;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 1.75rem;
+  color: var(--text-muted);
+  transition: color var(--transition-speed);
+}
+
+.modal-close:hover {
+  color: var(--status-danger);
+}
+
+.modal-card h2 {
+  font-family: var(--font-serif-body);
+  color: var(--imperial-blue);
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+/* =========================================
+   MOBILE RESPONSIVENESS
+   ========================================= */
+@media (max-width: 768px) {
+  .login-page {
+    padding: var(--space-md);
+  }
+
+  .login-panel {
+    flex-direction: column;
+    min-height: auto;
+    max-width: 420px;
+  }
+
+  .login-left {
+    margin-right: 0;
+    margin-bottom: -24px;
+    border-radius: 24px 24px 0 0;
+    padding: 2.5rem 1.5rem;
+  }
+
+  .login-left-logo {
+    height: 100px;
+  }
+
+  .login-right {
+    border-radius: 24px;
+    box-shadow: 0 -10px 20px rgba(0,0,0,0.1); /* Flips shadow upward */
+  }
+}

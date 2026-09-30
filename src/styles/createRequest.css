@@ -1,0 +1,163 @@
+/* =========================================
+   PAGE LAYOUT
+   ========================================= */
+.request-page-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.request-header {
+  text-align: center;
+  margin-bottom: var(--space-xl);
+}
+
+.request-header h1 {
+  font-family: var(--font-heading); /* Replaced old serif-body variable */
+  color: var(--imperial-blue);
+  margin-bottom: var(--space-xs);
+}
+
+.request-header p {
+  color: var(--text-muted);
+}
+
+/* =========================================
+   CARD UI FOUNDATION
+   ========================================= */
+.card-ui {
+  background-color: var(--surface-white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  width: 100%;
+  max-width: 600px; /* Slightly wider to accommodate side-by-side inputs */
+  padding: var(--space-xl);
+}
+
+/* =========================================
+   FORM ELEMENTS
+   ========================================= */
+.request-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md); /* Modern way to handle spacing between form groups */
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-row {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.half-width {
+  flex: 1;
+}
+
+.request-form label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.request-form select,
+.request-form input,
+.request-form textarea {
+  padding: 12px 16px;
+  border: 1.5px solid var(--border-light); /* Replaced hardcoded #ccc */
+  border-radius: var(--radius-sm);
+  font-size: 0.95rem;
+  font-family: var(--font-body);
+  background-color: var(--surface-white);
+  transition: all var(--transition-speed);
+}
+
+.request-form select:focus,
+.request-form input:focus,
+.request-form textarea:focus {
+  outline: none;
+  border-color: var(--imperial-blue);
+  box-shadow: 0 0 0 3px rgba(2, 35, 96, 0.1); /* Match the login form focus ring */
+}
+
+/* =========================================
+   BUTTONS
+   ========================================= */
+.submit-button {
+  margin-top: var(--space-md);
+  background-color: var(--imperial-blue); /* Navy is more authoritative for submission */
+  color: var(--surface-white);
+  font-weight: 700;
+  padding: 14px;
+  border-radius: 999px;
+  font-size: 1rem;
+  box-shadow: 0 4px 12px rgba(2, 35, 96, 0.2);
+}
+
+.submit-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(2, 35, 96, 0.3);
+}
+
+.mt-2 {
+  margin-top: var(--space-lg);
+}
+
+/* =========================================
+   SUCCESS STATE
+   ========================================= */
+.success-message {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.success-icon {
+  width: 64px;
+  height: 64px;
+  color: var(--status-success);
+  margin-bottom: var(--space-md);
+}
+
+.success-message h2 {
+  font-family: var(--font-heading);
+  color: var(--imperial-blue);
+  margin-bottom: var(--space-sm);
+}
+
+.success-details {
+  background-color: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  margin: var(--space-md) 0;
+  width: 100%;
+}
+
+.success-details p {
+  margin: 4px 0;
+  font-size: 0.95rem;
+}
+
+.success-note {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* =========================================
+   MOBILE RESPONSIVENESS
+   ========================================= */
+@media (max-width: 600px) {
+  .form-row {
+    flex-direction: column; /* Stacks Collection and Payment method on phones */
+    gap: var(--space-md);
+  }
+}

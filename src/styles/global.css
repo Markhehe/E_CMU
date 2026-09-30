@@ -1,0 +1,101 @@
+/* =========================================
+   E-CMU PORTAL | GLOBAL DESIGN TOKENS
+   ========================================= */
+
+:root {
+  /* 1. Core Brand Colors */
+  --imperial-blue: #022360;    /* Primary Navy */
+  --honey-bronze: #eea840;     /* Accent Gold */
+  --parchment: #f8f3ee;        /* Soft Cream/Off-white */
+
+  /* 2. Neutral & Surface Colors */
+  --surface-white: #ffffff;
+  --text-dark: #1a1a1a;
+  --text-muted: #666666;
+  --border-light: #e2e8f0;
+
+  /* 3. Semantic Status Colors (For Dashboard Badges) */
+  --status-success: #198754;   /* Cleared / Paid / Ready */
+  --status-pending: #ffc107;   /* Pending Clearance / Unpaid */
+  --status-processing: #0d6efd;/* Processing */
+  --status-danger: #dc3545;    /* Holds / Errors */
+
+  /* 4. Typography Stacks */
+  --font-heading: 'Merriweather', 'Times New Roman', serif;
+  --font-brand: 'Oswald', sans-serif;
+  --font-body: 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+
+  /* 5. Spacing System (Prevents hardcoded margins/paddings) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* 6. Borders & Shadows */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.08);
+  
+  /* 7. Animation */
+  --transition-speed: 0.2s ease-in-out;
+}
+
+/* =========================================
+   MODERN CSS RESET
+   ========================================= */
+
+/* Robust box-sizing for all elements */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* Strip default browser margins and paddings */
+body, h1, h2, h3, h4, p, ul, ol, figure {
+  margin: 0;
+  padding: 0;
+}
+
+/* Base Body Setup */
+body {
+  font-family: var(--font-body);
+  /* Changed from imperial-blue to parchment since 80% of your app screens are light */
+  background-color: var(--parchment); 
+  color: var(--text-dark);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typography Defaults */
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  line-height: 1.2;
+  color: var(--imperial-blue);
+}
+
+/* Interactive Elements */
+a {
+  text-decoration: none;
+  color: var(--imperial-blue);
+  transition: color var(--transition-speed);
+}
+
+a:hover {
+  color: var(--honey-bronze);
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  transition: all var(--transition-speed);
+}
+
+/* Prevent images from overflowing containers */
+img {
+  max-width: 100%;
+  display: block;
+}

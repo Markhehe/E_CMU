@@ -1,0 +1,323 @@
+/* =========================================
+   APP SHELL & LAYOUT
+   ========================================= */
+
+/* Use the app-shell for the background color instead of body to prevent bleed */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100vw;
+  background-color: var(--imperial-blue);
+  overflow-x: hidden;
+}
+
+/* =========================================
+   SIDEBAR
+   ========================================= */
+.sidebar {
+  width: 240px;
+  background-color: var(--imperial-blue);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  /* Use cubic-bezier for a more premium, natural sliding animation */
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Desktop Sidebar Toggle (Pushes content left/right) */
+.sidebar:not(.sidebar-open) {
+  margin-left: -240px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: var(--space-lg);
+}
+
+.sidebar-logo {
+  height: 40px;
+  width: auto;
+}
+
+.sidebar-portal-name {
+  font-family: var(--font-brand);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--surface-white);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.sidebar-portal-name span {
+  color: var(--honey-bronze);
+}
+
+.sidebar-divider {
+  border: none;
+  /* Replaced #ccc with a translucent white for better contrast on dark navy */
+  border-top: 1px solid rgba(255, 255, 255, 0.15); 
+  margin: 0 var(--space-lg) var(--space-md);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-sm) 0;
+}
+
+.sidebar-link {
+  font-family: var(--font-body);
+  color: rgba(255, 255, 255, 0.85); /* Slightly muted when inactive */
+  font-weight: 600;
+  font-size: 1.05rem;
+  padding: 12px var(--space-lg);
+  transition: all var(--transition-speed);
+  border-left: 4px solid transparent; /* Prepares space for active indicator */
+}
+
+/* Added Active Tab Indicator */
+.sidebar-link:hover,
+.sidebar-link.active {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--surface-white);
+  border-left-color: var(--honey-bronze); /* Gold left-bar on the active tab */
+}
+
+/* =========================================
+   MAIN CONTENT AREA
+   ========================================= */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface-white);
+  border-radius: 20px 0 0 20px; /* The rounded card effect */
+  overflow: hidden;
+  /* Added a soft drop shadow to make the white container pop over the navy background */
+  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1); 
+  min-width: 0; /* Prevents flexbox children from breaking page widths */
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-light); /* Replaced #eee */
+  background-color: var(--surface-white);
+}
+
+.menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  color: var(--imperial-blue);
+  padding: 6px;
+  margin-right: var(--space-md);
+  margin-left: -8px;
+  border-radius: var(--radius-sm);
+}
+
+.menu-toggle:hover {
+  background-color: rgba(2, 35, 96, 0.05); /* Soft hover state */
+}
+
+.page-header-org {
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--imperial-blue);
+  margin: 0;
+}
+
+.main-content {
+  flex: 1;
+  background-color: var(--parchment);
+  padding: var(--space-xl);
+  overflow-y: auto;
+}
+
+/* =========================================
+   MOBILE RESPONSIVENESS
+   ========================================= */
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .app-main {
+    border-radius: 0; /* Remove rounded corners on mobile to look like a native app */
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 50;
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar:not(.sidebar-open) {
+    margin-left: 0; /* Cancels desktop margin behavior */
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px); /* Modern frosted glass effect */
+    z-index: 40;
+  }
+}
+/* =========================================
+   HEADER & USER PROFILE WIDGET
+   ========================================= */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* Pushes left and right sections apart */
+  height: 55px;
+  padding: 0 var(--space-xl);
+  border-bottom: 1px solid var(--border-light);
+  background-color: var(--surface-white);
+  z-index: 10;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+  margin-right: 1.5rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* User Profile Widget (matches reference image) */
+.user-profile-widget {
+  position: relative; /* [FIX ADDED]: Anchors the absolute dropdown to this container */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-speed);
+  flex-shrink: 0;
+}
+
+.user-profile-widget:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+.user-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background-color: var(--imperial-blue); /* CMU Navy base */
+  color: var(--honey-bronze); /* CMU Gold text */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+}
+
+.user-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-dark);
+  line-height: 1.2;
+}
+
+.user-role {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.dropdown-arrow {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.dropdown-arrow.open {
+  transform: rotate(180deg);
+}
+
+/* Header Dropdown (Logout/Settings) */
+.header-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0; /* Aligns the right edge of dropdown with right edge of widget */
+  left: auto;
+  margin-top: 8px;
+  background-color: var(--surface-white);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* Slightly softer, premium shadow */
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  min-width: 180px;
+  padding: var(--space-xs) 0;
+  z-index: 999;
+  transform-origin: top right; /* Makes the animation scale from the corner */
+  animation: dropdownFadeIn 0.15s ease-out forwards;
+}
+
+.header-dropdown-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  color: var(--text-dark);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.header-dropdown-menu button:hover {
+  background-color: rgba(2, 35, 96, 0.04);
+}
+
+.header-dropdown-menu .text-danger {
+  color: var(--status-danger);
+  border-top: 1px solid var(--border-light);
+  margin-top: 4px;
+}
+
+@media (max-width: 768px) {
+  .user-info {
+    display: none; /* Hides the name/role text on mobile */
+  }
+  
+  .page-header-org {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis; /* Adds "..." if the title is too long */
+    min-width: 0;
+  }
+}

@@ -1,0 +1,177 @@
+/* =========================================
+   DASHBOARD LAYOUT & TYPOGRAPHY
+   ========================================= */
+.dashboard-page h1 {
+  font-family: var(--font-heading);
+  color: var(--imperial-blue);
+  margin-bottom: var(--space-xs);
+}
+
+.dashboard-subtext {
+  color: var(--text-muted);
+  margin-bottom: var(--space-xl);
+}
+
+/* =========================================
+   TABLE UI & SCROLL CONTAINER
+   ========================================= */
+.request-table-wrapper {
+  background-color: var(--surface-white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  
+  /* =========================================
+     DYNAMIC SIZING (The Fix)
+     ========================================= */
+  /* 100vh is the full monitor height. 
+     Subtracting ~280px accounts for your top header, page titles, and leaves a clean bottom gap */
+  max-height: calc(100vh - 280px); 
+  
+  /* Ensures the table never squishes too small on laptops */
+  min-height: 400px; 
+  
+  overflow-y: auto;
+  position: relative;
+}
+
+.request-table {
+  width: 100%;
+  min-width: 700px;
+  border-collapse: collapse;
+}
+
+.request-table th {
+  text-align: left;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1rem 1.5rem;
+  border-bottom: 2px solid var(--border-light);
+  /* The added sticky properties */
+  position: sticky;
+  top: 0;
+  background-color: var(--surface-white);
+  z-index: 10;
+  /* Optional: Adds a tiny shadow under the header when scrolling */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.request-table th.text-right {
+  text-align: right;
+}
+
+.request-table td {
+  padding: 1rem 1.5rem;
+  font-size: 0.95rem;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-dark);
+}
+
+/* CSS-based alternate row striping */
+.request-table tbody tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.015);
+}
+
+/* Row hover state */
+.request-table tbody tr:hover {
+  background-color: rgba(2, 35, 96, 0.03);
+}
+
+.request-table tr:last-child td {
+  border-bottom: none;
+}
+
+.doc-name {
+  font-weight: 600;
+  color: var(--imperial-blue);
+}
+
+/* =========================================
+   SMART ACTION MENU (PREVENTS CLIPPING)
+   ========================================= */
+.actions-cell {
+  position: relative;
+  text-align: right;
+}
+
+.actions-button {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--text-muted);
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-speed);
+}
+
+.actions-button:hover,
+.actions-button[aria-expanded="true"] {
+  background-color: rgba(2, 35, 96, 0.08);
+  color: var(--imperial-blue);
+}
+
+.actions-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.8rem 1rem;
+  background: none;
+  border: none;
+  font-size: 0.85rem;
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: background-color var(--transition-speed);
+}
+
+.actions-menu button:hover {
+  background-color: rgba(2, 35, 96, 0.04);
+  color: var(--imperial-blue);
+}
+
+/* =========================================
+   EMPTY STATE
+   ========================================= */
+.empty-state {
+  background-color: var(--surface-white);
+  border-radius: var(--radius-md);
+  padding: var(--space-xl);
+  text-align: center;
+  box-shadow: var(--shadow-soft);
+  color: var(--text-muted);
+}
+
+/* =========================================
+   FIXED ACTION MENU (Admin Dashboard Override)
+   ========================================= */
+.actions-menu-fixed {
+  position: fixed; /* Breaks out of ALL parent containers */
+  background-color: var(--surface-white);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  z-index: 9999; /* Ensures it sits on top of the entire website */
+  min-width: 180px;
+  padding: var(--space-xs) 0;
+  animation: dropdownFadeIn 0.15s ease-out forwards;
+}
+
+.actions-menu-fixed button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  font-size: 0.85rem;
+  color: var(--text-dark);
+  cursor: pointer;
+  transition: background-color var(--transition-speed);
+}
+
+.actions-menu-fixed button:hover {
+  background-color: rgba(2, 35, 96, 0.04);
+  color: var(--imperial-blue);
+}
