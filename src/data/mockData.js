@@ -29,7 +29,7 @@ export const mockRequests = [
     status: 'PENDING PAYMENT',
     sasoCleared: false, 
     paymentMethod: 'Online',
-    hasReceipt: false 
+    hasReceipt: true 
   },
   { 
     id: 'REQ-002', 

@@ -10,10 +10,9 @@ import Guide from './pages/Guide';
 import Dashboard from './pages/student/Dashboard';
 import CreateRequest from './pages/student/CreateRequest';
 import AdminDashboard from './pages/admin/AdminDashboard';
-
-// WE WILL CREATE THESE TWO FILES NEXT:
 import FinanceDashboard from './pages/finance/FinanceDashboard';
 import SasoDashboard from './pages/saso/SasoDashboard';
+import Settings from './pages/Settings'; // NEW: Imported the Settings page
 
 // DRY Principle: Centralized routing logic for all 4 user types
 const getDefaultRoute = (role) => {
@@ -78,6 +77,13 @@ function App() {
           } 
         />
 
+        {/* =========================================
+            SHARED ROUTES (All authenticated users)
+            ========================================= */}
+        <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+          <Route path="/settings" element={<Settings />} />
+        </Route>
+
         {/* STUDENT ROUTES */}
         <Route element={<ProtectedRoute allowedRole="STUDENT"><AppShell /></ProtectedRoute>}>
           <Route path="/dashboard" element={<Dashboard />} />
@@ -92,13 +98,13 @@ function App() {
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
         </Route>
 
-        {/* NEW: FINANCE ROUTES */}
+        {/* FINANCE ROUTES */}
         <Route element={<ProtectedRoute allowedRole="FINANCE"><AppShell /></ProtectedRoute>}>
           <Route path="/finance/dashboard" element={<FinanceDashboard />} />
           <Route path="/finance" element={<Navigate to="/finance/dashboard" replace />} />
         </Route>
 
-        {/* NEW: SASO ROUTES */}
+        {/* SASO ROUTES */}
         <Route element={<ProtectedRoute allowedRole="SASO"><AppShell /></ProtectedRoute>}>
           <Route path="/saso/dashboard" element={<SasoDashboard />} />
           <Route path="/saso" element={<Navigate to="/saso/dashboard" replace />} />

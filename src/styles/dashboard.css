@@ -1,4 +1,4 @@
-/* =========================================
+ /* =========================================
    DASHBOARD LAYOUT & TYPOGRAPHY
    ========================================= */
 .dashboard-page h1 {
@@ -7,9 +7,82 @@
   margin-bottom: var(--space-xs);
 }
 
+.dashboard-header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  min-height: 80px;
+  margin-bottom: 2rem;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.header-content {
+  flex: 1 1 auto;
+}
+
 .dashboard-subtext {
   color: var(--text-muted);
-  margin-bottom: var(--space-xl);
+  margin-bottom: 0.5rem;
+}
+
+.header-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.header-actions {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
+
+/* =========================================
+   BUTTONS
+   ========================================= */
+.btn-primary {
+  padding: 0.65rem 1.25rem;
+  background-color: var(--imperial-blue);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(2, 35, 96, 0.15);
+  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(2, 35, 96, 0.25);
+}
+
+.btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  padding: 0.85rem;
+  background-color: transparent;
+  border: 1px solid var(--border-light);
+  color: #495057;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #f8f9fa;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* =========================================
@@ -19,17 +92,9 @@
   background-color: var(--surface-white);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
-  
-  /* =========================================
-     DYNAMIC SIZING (The Fix)
-     ========================================= */
-  /* 100vh is the full monitor height. 
-     Subtracting ~280px accounts for your top header, page titles, and leaves a clean bottom gap */
+  border: 1px solid var(--border-light);
   max-height: calc(100vh - 280px); 
-  
-  /* Ensures the table never squishes too small on laptops */
   min-height: 400px; 
-  
   overflow-y: auto;
   position: relative;
 }
@@ -38,6 +103,12 @@
   width: 100%;
   min-width: 700px;
   border-collapse: collapse;
+  table-layout: fixed;
+  margin: 0;
+}
+
+.request-table thead {
+  background-color: #f8f9fa;
 }
 
 .request-table th {
@@ -47,49 +118,105 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 1rem 1.5rem;
-  border-bottom: 2px solid var(--border-light);
-  /* The added sticky properties */
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-light);
   position: sticky;
   top: 0;
-  background-color: var(--surface-white);
+  background-color: #f8f9fa;
   z-index: 10;
-  /* Optional: Adds a tiny shadow under the header when scrolling */
-  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 
-.request-table th.text-right {
-  text-align: right;
-}
+/* Column Widths */
+.col-doc { width: 25%; }
+.col-date { width: 15%; }
+.col-clearance { width: 15%; }
+.col-status { width: 20%; }
+.col-actions { width: 10%; text-align: right; }
 
 .request-table td {
-  padding: 1rem 1.5rem;
+  padding: 1rem;
   font-size: 0.95rem;
   border-bottom: 1px solid var(--border-light);
-  color: var(--text-dark);
+  color: #495057;
 }
 
-/* CSS-based alternate row striping */
-.request-table tbody tr:nth-child(even) {
-  background-color: rgba(0, 0, 0, 0.015);
-}
+.request-table tbody tr:nth-child(even) { background-color: rgba(0, 0, 0, 0.015); }
+.request-table tbody tr:hover { background-color: rgba(2, 35, 96, 0.03); }
+.request-table tr:last-child td { border-bottom: none; }
 
-/* Row hover state */
-.request-table tbody tr:hover {
-  background-color: rgba(2, 35, 96, 0.03);
-}
-
-.request-table tr:last-child td {
-  border-bottom: none;
+/* Document Cell Styles */
+.doc-name-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .doc-name {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--imperial-blue);
 }
 
+.doc-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  letter-spacing: 0.3px;
+}
+
+/* Status specific */
+.status-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.status-alert {
+  font-size: 0.7rem;
+  color: #e03131;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
 /* =========================================
-   SMART ACTION MENU (PREVENTS CLIPPING)
+   MODAL & FORMS (For Dashboard pop-ups)
+   ========================================= */
+.modal-text {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 2rem;
+  line-height: 1.5;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-input {
+  padding: 1rem;
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  background-color: #f8f9fa;
+  font-size: 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.modal-actions button {
+  flex: 1;
+}
+
+/* =========================================
+   SMART ACTION MENU
    ========================================= */
 .actions-cell {
   position: relative;
@@ -104,58 +231,24 @@
   padding: 4px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition-speed);
+  transition: all 0.2s;
 }
 
-.actions-button:hover,
-.actions-button[aria-expanded="true"] {
+.actions-button:hover {
   background-color: rgba(2, 35, 96, 0.08);
   color: var(--imperial-blue);
 }
 
-.actions-menu button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 0.8rem 1rem;
-  background: none;
-  border: none;
-  font-size: 0.85rem;
-  color: var(--text-dark);
-  cursor: pointer;
-  transition: background-color var(--transition-speed);
-}
-
-.actions-menu button:hover {
-  background-color: rgba(2, 35, 96, 0.04);
-  color: var(--imperial-blue);
-}
-
-/* =========================================
-   EMPTY STATE
-   ========================================= */
-.empty-state {
-  background-color: var(--surface-white);
-  border-radius: var(--radius-md);
-  padding: var(--space-xl);
-  text-align: center;
-  box-shadow: var(--shadow-soft);
-  color: var(--text-muted);
-}
-
-/* =========================================
-   FIXED ACTION MENU (Admin Dashboard Override)
-   ========================================= */
+/* FIXED ACTION MENU */
 .actions-menu-fixed {
-  position: fixed; /* Breaks out of ALL parent containers */
+  position: fixed;
   background-color: var(--surface-white);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
-  z-index: 9999; /* Ensures it sits on top of the entire website */
+  z-index: 9999;
   min-width: 180px;
-  padding: var(--space-xs) 0;
-  animation: dropdownFadeIn 0.15s ease-out forwards;
+  padding: 4px 0;
 }
 
 .actions-menu-fixed button {
@@ -165,13 +258,106 @@
   padding: 10px 16px;
   background: none;
   border: none;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--text-dark);
   cursor: pointer;
-  transition: background-color var(--transition-speed);
+  transition: background-color 0.2s;
 }
 
 .actions-menu-fixed button:hover {
   background-color: rgba(2, 35, 96, 0.04);
   color: var(--imperial-blue);
+}
+
+.actions-menu-fixed button.highlight-action {
+  color: var(--imperial-blue);
+  font-weight: 500;
+}
+
+/* =========================================
+   PREMIUM TABLE TOOLBAR (Search, Sort, Filter)
+   ========================================= */
+.table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+}
+
+.toolbar-input {
+  padding: 0.65rem 1.2rem;
+  border-radius: 8px; /* Smoother curves */
+  border: 1px solid var(--border-light, #e4e4e7);
+  background-color: #ffffff;
+  font-size: 0.9rem;
+  color: #27272a;
+  width: 280px;
+  outline: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); /* Premium subtle shadow */
+  transition: all 0.2s ease;
+}
+
+.toolbar-input:focus {
+  border-color: var(--imperial-blue);
+  box-shadow: 0 0 0 3px rgba(2, 35, 96, 0.08);
+}
+
+.toolbar-select {
+  /* appearance: none hides the ugly default browser dropdown arrow */
+  appearance: none; 
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  
+  padding: 0.65rem 2.5rem 0.65rem 1.2rem; /* Extra padding on the right for the custom arrow */
+  border-radius: 8px;
+  border: 1px solid var(--border-light, #e4e4e7);
+  background-color: #fcfcfc;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #3f3f46;
+  cursor: pointer;
+  outline: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  
+  /* Custom modern SVG arrow encoded directly into CSS */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 16px;
+}
+
+.toolbar-select:hover {
+  background-color: #ffffff;
+  border-color: #d4d4d8;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* Lifts up slightly on hover */
+}
+
+.toolbar-select:focus {
+  border-color: var(--imperial-blue);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(2, 35, 96, 0.08);
+}
+
+/* =========================================
+   SKELETON LOADER ANIMATION
+   ========================================= */
+@keyframes shimmer {
+  0% { background-position: -468px 0; }
+  100% { background-position: 468px 0; }
+}
+
+.skeleton-row td {
+  padding: 1.25rem 1rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.skeleton-block {
+  height: 20px;
+  border-radius: 6px;
+  background: #f6f7f8;
+  background-image: linear-gradient(to right, #f6f7f8 0%, #edeef1 20%, #f6f7f8 40%, #f6f7f8 100%);
+  background-repeat: no-repeat;
+  background-size: 800px 100%; 
+  animation: shimmer 1.5s linear infinite forwards;
 }

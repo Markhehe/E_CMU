@@ -102,14 +102,6 @@
   min-width: 0; /* Prevents flexbox children from breaking page widths */
 }
 
-.page-header {
-  display: flex;
-  align-items: center;
-  padding: var(--space-md) var(--space-lg);
-  border-bottom: 1px solid var(--border-light); /* Replaced #eee */
-  background-color: var(--surface-white);
-}
-
 .menu-toggle {
   display: flex;
   align-items: center;
@@ -186,11 +178,13 @@
 .page-header {
   display: flex;
   align-items: center;
-  justify-content: space-between; /* Pushes left and right sections apart */
+  justify-content: space-between; 
   height: 55px;
   padding: 0 var(--space-xl);
-  border-bottom: 1px solid var(--border-light);
   background-color: var(--surface-white);
+  border-bottom: 1px solid var(--border-light);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* Premium shadow */
+  position: relative; 
   z-index: 10;
 }
 
@@ -321,3 +315,4 @@
     min-width: 0;
   }
 }
+

@@ -45,3 +45,40 @@
   background-color: color-mix(in srgb, var(--text-muted) 15%, transparent);
   color: var(--text-muted);
 }
+
+/* =========================================
+   CLEARANCE INDICATOR (Dot + Text Style)
+   ========================================= */
+.clearance-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px; /* Space between dot and text */
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.clearance-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Cleared State */
+.clearance-cleared {
+  color: #12b886;
+}
+.clearance-cleared .clearance-dot {
+  background-color: #12b886;
+  box-shadow: 0 0 0 3px rgba(18, 184, 134, 0.15); /* Subtle glowing ring */
+}
+
+/* Hold State */
+.clearance-hold {
+  color: #f08c00;
+}
+.clearance-hold .clearance-dot {
+  background-color: #f08c00;
+  box-shadow: 0 0 0 3px rgba(240, 140, 0, 0.15); /* Subtle glowing ring */
+}

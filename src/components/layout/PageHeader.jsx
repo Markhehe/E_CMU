@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext'; // Replaces prop-drilling
-import '../../styles/layout.css'; // Path updated for the layout folder
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext'; 
+import '../../styles/layout.css'; 
 
-function PageHeader({ onMenuClick }) { // user and onLogout props removed
+function PageHeader({ onMenuClick }) { 
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const { currentUser, logout } = useAuth(); // Pulls data directly from Global State
+  const { currentUser, logout } = useAuth(); 
+  const navigate = useNavigate(); // Hook for programmatic navigation
 
   useEffect(() => {
     const handleOutsideClick = () => setDropdownOpen(false);
@@ -19,6 +21,11 @@ function PageHeader({ onMenuClick }) { // user and onLogout props removed
   const toggleDropdown = (e) => {
     e.stopPropagation();
     setDropdownOpen((prev) => !prev);
+  };
+
+  const handleSettingsClick = () => {
+    setDropdownOpen(false);
+    navigate('/settings');
   };
 
   return (
@@ -41,7 +48,6 @@ function PageHeader({ onMenuClick }) { // user and onLogout props removed
       </div>
 
       <div className="header-right">
-        {/* Widget wrapper serves as the positioning anchor */}
         <div 
           className="user-profile-widget" 
           onClick={toggleDropdown}
@@ -61,13 +67,13 @@ function PageHeader({ onMenuClick }) { // user and onLogout props removed
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
 
-          {/* Moved the dropdown INSIDE the widget to anchor it properly */}
           {dropdownOpen && (
             <div 
               className="header-dropdown-menu" 
-              onClick={(e) => e.stopPropagation()} // Prevents clicking the menu from triggering the widget toggle
+              onClick={(e) => e.stopPropagation()} 
             >
-              <button onClick={() => setDropdownOpen(false)}>Account Settings</button>
+              {/* Wire up the settings button */}
+              <button onClick={handleSettingsClick}>Account Settings</button>
               <button className="text-danger" onClick={logout}>
                 Sign Out
               </button>

@@ -82,7 +82,7 @@ function Login() {
                 id="studentId"
                 type="text"
                 className="auth-input"
-                placeholder="Type 'saso', 'finance', 'admin', or 'Student ID"
+                placeholder="Enter Email or Student ID"
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
                 autoComplete="username"
@@ -93,7 +93,7 @@ function Login() {
                 id="password"
                 type="password"
                 className="auth-input"
-                placeholder="Password (any password works for demo)"
+                placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
