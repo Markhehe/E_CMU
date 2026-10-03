@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRequests } from '../../hooks/useRequests';
 import { useActionMenu } from '../../hooks/useActionMenu';
 import { useToast } from '../../contexts/ToastContext';
+import { useDebounce } from '../../hooks/useDebounce';
 import { formatDate } from '../../utils/formatters';
 import StatusBadge from '../../components/ui/StatusBadge';
 import RequestDetailsModal from '../../components/ui/RequestDetailsModal';
@@ -25,6 +26,13 @@ function FinanceDashboard() {
   
   const { openMenuId, setOpenMenuId, menuCoords, toggleMenu } = useActionMenu();
   const { addToast } = useToast();
+
+  const [localSearch, setLocalSearch] = useState(searchTerm);
+  const debouncedSearch = useDebounce(localSearch, 300);
+
+  useEffect(() => {
+    setSearchTerm(debouncedSearch);
+  }, [debouncedSearch, setSearchTerm]);
   
   const [viewingRequest, setViewingRequest] = useState(null); 
   const [viewingReceiptId, setViewingReceiptId] = useState(null);
@@ -66,15 +74,15 @@ function FinanceDashboard() {
           display: 'flex', 
           justifyContent: 'flex-end', 
           gap: '0.75rem',
-          marginTop: '0.5rem',
+          marginTop: '-1.5rem',
           marginBottom: '1rem'
         }}
       >
         <input 
           type="text" 
           placeholder="Search Name or ID..." 
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          value={localSearch}
+          onChange={(e) => setLocalSearch(e.target.value)}
           className="toolbar-input"
         />
         

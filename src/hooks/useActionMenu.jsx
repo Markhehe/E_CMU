@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 
-/**
- * CAPSTONE DEFENSE NOTE (DRY Principle): 
+/*
  * Centralized action menu logic with Smart Viewport Collision Detection.
  * If a button is too close to the bottom of the screen, the menu flips upwards.
  */
@@ -17,11 +16,13 @@ export function useActionMenu() {
     if (openMenuId !== null) {
       window.addEventListener('click', closeMenu);
       window.addEventListener('scroll', closeMenu, true); 
+      window.addEventListener('resize', closeMenu); // NEW: Closes menu on screen resize/rotation
     }
     
     return () => {
       window.removeEventListener('click', closeMenu);
       window.removeEventListener('scroll', closeMenu, true);
+      window.removeEventListener('resize', closeMenu);
     };
   }, [openMenuId]);
 
