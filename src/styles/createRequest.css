@@ -44,6 +44,18 @@
   gap: var(--space-md); /* Modern way to handle spacing between form groups */
 }
 
+.request-create-modal {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.request-create-modal .request-form-embedded,
+.request-create-modal .success-message.card-ui {
+  max-width: none;
+  padding: 0;
+  box-shadow: none;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;

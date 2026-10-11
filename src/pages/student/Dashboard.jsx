@@ -4,29 +4,30 @@ import { useRequests } from '../../hooks/useRequests';
 import { useActionMenu } from '../../hooks/useActionMenu';
 import { useToast } from '../../contexts/ToastContext';
 import { formatDate } from '../../utils/formatters';
-import { useNavigate } from 'react-router-dom';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ClearanceBadge from '../../components/ui/ClearanceBadge';
 import RequestDetailsModal from '../../components/ui/RequestDetailsModal';
 import Modal from '../../components/ui/Modal';
 import TableSkeleton from '../../components/ui/TableSkeleton';
 import TableEmptyState from '../../components/ui/TableEmptyState';
+import RequestDisplaySelect from '../../components/ui/RequestDisplaySelect';
+import RequestPagination from '../../components/ui/RequestPagination';
+import { useRequestDisplay } from '../../hooks/useRequestDisplay';
+import CreateRequest from './CreateRequest';
 import '../../styles/dashboard.css';
 
 function Dashboard() {
-  const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { requests, isLoading } = useRequests();
+  const { requests, isLoading, refreshRequests } = useRequests();
   const { openMenuId, setOpenMenuId, menuCoords, toggleMenu } = useActionMenu();
   const { addToast } = useToast();
 
   const [uploadingRequestId, setUploadingRequestId] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [viewingRequest, setViewingRequest] = useState(null); 
+  const [isCreateRequestOpen, setIsCreateRequestOpen] = useState(false);
 
-  // ==========================================
-  // NEW: FILE UPLOAD PREVIEW STATES
-  // ==========================================
+  // File Upload Preview States
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
 
@@ -42,24 +43,34 @@ function Dashboard() {
     if (isUploading) return;
     setUploadingRequestId(null);
     setSelectedFile(null);
-    if (previewUrl) URL.revokeObjectURL(previewUrl); // Clear memory
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
   };
-  // ==========================================
 
   const studentRequests = requests.filter(req => req.studentId === currentUser?.id);
+  
+  const {
+    mode,
+    setMode,
+    visibleRequests,
+    currentPage,
+    totalPages,
+    requestsPerPage,
+    setCurrentPage
+  } = useRequestDisplay(studentRequests, 'student', 5, 'pagination');
+
   const activeMenuRequest = studentRequests.find(req => req.id === openMenuId);
 
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedFile) return; // Safety check
+    if (!selectedFile) return;
 
     setIsUploading(true);
     await new Promise(resolve => setTimeout(resolve, 1200)); 
     addToast('Receipt uploaded successfully. Awaiting Finance verification.', 'success');
     setIsUploading(false);
     
-    closeUploadModal(); // Use the new cleanup function
+    closeUploadModal();
   };
 
   const handleViewDetails = (request) => {
@@ -70,48 +81,42 @@ function Dashboard() {
   return (
     <div className="dashboard-page">
       
-      {/* 1. Page Header (Now matches Admin/Finance/SASO styling) */}
-      <header style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ margin: 0, color: 'var(--imperial-blue)', fontFamily: 'var(--font-heading)' }}>
-          Student Dashboard
-        </h1>
-        <p className="dashboard-subtext" style={{ margin: '0.25rem 0 0 0' }}>
-          Track the status of your documents, payments, and clearances.
-        </p>
-        <p className="header-note" style={{ marginTop: '0.25rem' }}>
-          * Note: Clearance requirements vary by document. Not all requests require SASO approval.
-        </p>
+      {/* 1. Integrated Header and Action Toolbar */}
+      <header className="dashboard-header-container">
+        <div className="header-content">
+          <h1 className="dashboard-title">
+            Student Dashboard
+          </h1>
+          <p className="dashboard-subtext">
+            Track the status of your documents, payments, and clearances.
+          </p>
+          <p className="header-note">
+            * Note: Clearance requirements vary by document. Not all requests require SASO approval.
+          </p>
+        </div>
+
+        <div className="header-actions">
+          <button 
+            type="button"
+            className="btn-primary" 
+            onClick={() => setIsCreateRequestOpen(true)}
+          >
+            + Create a Document Request
+          </button>
+          <RequestDisplaySelect mode={mode} onChange={setMode} />
+        </div>
       </header>
 
-      {/* 2. Table Toolbar (Right-aligned above the table) */}
-      <div 
-        className="table-toolbar" 
-        style={{ 
-          display: 'flex', 
-          justifyContent: 'flex-end', 
-          gap: '0.75rem',
-          marginTop: '-2.5rem', // Preserved your specific margin
-          marginBottom: '1.5rem'
-        }}
-      >
-        <button 
-          className="btn-primary" 
-          onClick={() => navigate('/student/create-request')}
-        >
-          + Request New Document
-        </button>
-      </div>
-
-      {/* 3. The Table */}
-      <div className="request-table-wrapper">
+      {/* 2. The Table */}
+      <div className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}>
         <table className="request-table">
           <thead>
             <tr>
-              <th className="col-doc">Document</th>
-              <th className="col-date">Date Requested</th>
-              <th className="col-clearance">SASO Clearance</th>
-              <th className="col-status">Payment & Status</th>
-              <th className="col-actions">Actions</th>
+              <th className="col-doc" style={{ width: '30%' }}>Document</th>
+              <th className="col-date" style={{ width: '18%' }}>Date Requested</th>
+              <th className="col-clearance" style={{ width: '20%' }}>SASO Clearance</th>
+              <th className="col-status" style={{ width: '22%' }}>Payment &amp; Status</th>
+              <th className="col-actions" style={{ width: '10%', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -124,16 +129,38 @@ function Dashboard() {
                 subtext="When you request a document, it will appear here." 
               />
             ) : (
-              studentRequests.map((req) => (
-                <tr key={req.id}>
+              visibleRequests.map((req) => (
+                <tr
+                  key={req.id}
+                  className="request-row-clickable"
+                  tabIndex={0}
+                  aria-label={`View details for request ${req.id}`}
+                  onClick={() => handleViewDetails(req)}
+                  onKeyDown={(event) => {
+                    if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      handleViewDetails(req);
+                    }
+                  }}
+                >
                   <td className="doc-name-cell" title={req.docType}>
-                    <span className="doc-name">{req.docType}</span>
-                    <div className="doc-meta">ID: {req.id} &nbsp;|&nbsp; QTY: {req.quantity}</div>
+                    <button
+                      type="button"
+                      className="doc-name dashboard-request-document"
+                      aria-label={`View details for ${req.docType}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleViewDetails(req);
+                      }}
+                    >
+                      {req.docType}
+                    </button>
+                    <div className="doc-meta">ID: {req.displayId || req.id} &nbsp;|&nbsp; QTY: {req.quantity}</div>
                   </td>
                   <td>{formatDate(req.date || req.dateRequested)}</td>
                   <td><ClearanceBadge isCleared={req.sasoCleared} /></td>
-                  <td>
-                    <div className="status-stack">
+                  <td className="col-status-cell" style={{ textAlign: 'center' }}>
+                    <div className="status-stack" style={{ alignItems: 'center', justifyContent: 'center' }}>
                       <StatusBadge status={req.status} />
                       {req.paymentMethod === 'Online' && !req.hasReceipt && req.status !== 'REJECTED' && (
                         <span className="status-alert">Awaiting Receipt</span>
@@ -141,7 +168,16 @@ function Dashboard() {
                     </div>
                   </td>
                   <td className="actions-cell">
-                    <button className="actions-button" onClick={(e) => toggleMenu(e, req.id)}>⋮</button>
+                    <button
+                      type="button"
+                      className="actions-button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleMenu(event, req.id);
+                      }}
+                    >
+                      ⋮
+                    </button>
                   </td>
                 </tr>
               ))
@@ -150,32 +186,55 @@ function Dashboard() {
         </table>
       </div>
 
-      {/* 4. Action Menu */}
+      {/* 3. Pagination Footer */}
+      {!isLoading && mode === 'pagination' && (
+        <RequestPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          requestsPerPage={requestsPerPage}
+          totalRequests={studentRequests.length}
+          onPageChange={setCurrentPage}
+        />
+      )}
+
+      {/* 4. Action Context Menu */}
       {openMenuId && activeMenuRequest && (
         <div className="actions-menu-fixed" style={menuCoords}>
-          <button onClick={() => handleViewDetails(activeMenuRequest)}>View Details</button>
+          <button type="button" onClick={() => handleViewDetails(activeMenuRequest)}>View Details</button>
           
           {activeMenuRequest.paymentMethod === 'Online' && !activeMenuRequest.hasReceipt && (
-            <button className="highlight-action" onClick={() => { setUploadingRequestId(openMenuId); setOpenMenuId(null); }}>
+            <button type="button" className="highlight-action" onClick={() => { setUploadingRequestId(openMenuId); setOpenMenuId(null); }}>
               Upload Receipt
             </button>
           )}
           {activeMenuRequest.hasReceipt && (
-            <button onClick={() => setOpenMenuId(null)}>View Uploaded Receipt</button>
+            <button type="button" onClick={() => setOpenMenuId(null)}>View Uploaded Receipt</button>
           )}
         </div>
       )}
 
-      {/* 5. Reusable Request Details Modal */}
+      {/* 5. Request Details Modal */}
       <RequestDetailsModal 
         isOpen={!!viewingRequest} 
         onClose={() => setViewingRequest(null)} 
         request={viewingRequest} 
       />
 
+      <Modal
+        isOpen={isCreateRequestOpen}
+        onClose={() => setIsCreateRequestOpen(false)}
+        title="Create a Document Request"
+        maxWidth="700px"
+      >
+        <div className="request-create-modal">
+          <CreateRequest embedded onRequestCreated={refreshRequests} />
+        </div>
+      </Modal>
+
       {/* 6. Upload Receipt Modal */}
       <Modal 
         isOpen={!!uploadingRequestId} 
+        closeUploadModal={closeUploadModal}
         onClose={closeUploadModal} 
         title="Upload Receipt"
       >
@@ -183,8 +242,6 @@ function Dashboard() {
           Please attach your GCash or Bank Transfer proof of payment for request <strong>{uploadingRequestId}</strong>.
         </p>
         <form className="modal-form" onSubmit={handleUploadSubmit}>
-          
-          {/* NEW: THE PREVIEW BOX */}
           {previewUrl && (
             <div style={{ 
               width: '100%', 

@@ -1,156 +1,209 @@
+/**
+ * Component: SasoDashboard (SASO Clearance Panel)
+ * Manages student clearance holds, disciplinary reviews, and clearance status toggles
+ * for university document requests.
+ */
+
 import { useState, useEffect } from 'react';
 import { useRequests } from '../../hooks/useRequests';
 import { useActionMenu } from '../../hooks/useActionMenu';
-import { useToast } from '../../contexts/ToastContext';
 import { useDebounce } from '../../hooks/useDebounce';
 import { formatDate } from '../../utils/formatters';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ClearanceBadge from '../../components/ui/ClearanceBadge';
 import RequestDetailsModal from '../../components/ui/RequestDetailsModal';
 import TableSkeleton from '../../components/ui/TableSkeleton';
-import TableEmptyState from '../../components/ui/TableEmptyState'; // NEW: Imported Empty State
+import TableEmptyState from '../../components/ui/TableEmptyState';
+import RequestDisplaySelect from '../../components/ui/RequestDisplaySelect';
+import RequestPagination from '../../components/ui/RequestPagination';
+import { useRequestDisplay } from '../../hooks/useRequestDisplay';
 import '../../styles/dashboard.css';
 
 function SasoDashboard() {
-  const { 
-    requests, 
-    isLoading, 
-    searchTerm, 
-    setSearchTerm, 
-    statusFilter, 
-    setStatusFilter, 
+  const {
+    requests,
+    isLoading,
+    searchTerm,
+    setSearchTerm,
+    statusFilter,
+    setStatusFilter,
     toggleClearance,
     sortOption,
-    setSortOption
+    setSortOption,
   } = useRequests();
-  
+
   const { openMenuId, setOpenMenuId, menuCoords, toggleMenu } = useActionMenu();
-  const { addToast } = useToast();
 
   const [localSearch, setLocalSearch] = useState(searchTerm);
   const debouncedSearch = useDebounce(localSearch, 300);
-  
-    useEffect(() => {
-      setSearchTerm(debouncedSearch);
-    }, [debouncedSearch, setSearchTerm]);
-  
+
+  useEffect(() => {
+    setSearchTerm(debouncedSearch);
+  }, [debouncedSearch, setSearchTerm]);
+
   const [viewingRequest, setViewingRequest] = useState(null);
 
-  const activeMenuRequest = requests.find(req => req.id === openMenuId);
+  const {
+    mode,
+    setMode,
+    visibleRequests,
+    currentPage,
+    totalPages,
+    requestsPerPage,
+    setCurrentPage,
+  } = useRequestDisplay(requests, 'saso', 5, 'pagination');
 
-  const handleClearanceUpdate = (id, isCleared) => {
-    toggleClearance(id, isCleared);
-    addToast(isCleared ? `Student cleared for request ${id}.` : `Hold placed on request ${id}.`, isCleared ? 'success' : 'error');
-    setOpenMenuId(null);
+  const activeMenuRequest = requests.find((req) => req.id === openMenuId);
+
+  const handleClearanceUpdate = async (id, isCleared) => {
+    try {
+      await toggleClearance(id, isCleared);
+    } finally {
+      setOpenMenuId(null);
+    }
   };
 
   const handleViewDetails = (request) => {
     setViewingRequest(request);
-    setOpenMenuId(null); 
+    setOpenMenuId(null);
   };
 
   return (
     <div className="dashboard-page">
-      
       {/* 1. Page Header */}
-      <header style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ margin: 0, color: 'var(--imperial-blue)', fontFamily: 'var(--font-heading)' }}>
-          SASO Clearance Panel
-        </h1>
-        <p className="dashboard-subtext" style={{ margin: '0.25rem 0 0 0' }}>
+      <header className="dashboard-header">
+        <h1 className="dashboard-title">SASO Clearance Panel</h1>
+        <p className="dashboard-subtext">
           Manage student disciplinary holds and institutional liabilities.
         </p>
       </header>
 
       {/* 2. Table Toolbar */}
-      <div 
-        className="table-toolbar" 
-        style={{ 
-          display: 'flex', 
-          justifyContent: 'flex-end', 
-          gap: '0.75rem',
-          marginTop: '-1.5rem',
-          marginBottom: '1rem'
-        }}
-      >
-        <input 
-          type="text" 
-          placeholder="Search Name or ID..." 
-          value={localSearch}
-          onChange={(e) => setLocalSearch(e.target.value)}
-          className="toolbar-input"
-        />
-        
-        <select 
-          value={sortOption}
-          onChange={(e) => setSortOption(e.target.value)}
-          className="toolbar-select"
-        >
-          <option value="DATE_DESC">Sort: Date (Newest)</option>
-          <option value="DATE_ASC">Sort: Date (Oldest)</option>
-          <option value="ID_ASC">Sort: ID (Ascending)</option>
-          <option value="ID_DESC">Sort: ID (Descending)</option>
-          <option value="NAME_ASC">Sort: Name (A-Z)</option>
-          <option value="NAME_DESC">Sort: Name (Z-A)</option>
-          <option value="DOC_ASC">Sort: Document (A-Z)</option>
-          <option value="STATUS_ASC">Sort: Status (Action Needed)</option>
-          <option value="STATUS_DESC">Sort: Status (Completed First)</option>
-        </select>
+      <div className="table-toolbar">
+        <div className="toolbar-left">
+          <input
+            type="text"
+            placeholder="Search Name or ID..."
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
+            className="toolbar-input"
+          />
+        </div>
 
-        <select 
-          value={statusFilter} 
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="toolbar-select"
-        >
-          <option value="ALL">Filter: All Statuses</option>
-          <option value="PENDING PAYMENT">Filter: Pending</option>
-          <option value="PROCESSING">Filter: Processing</option>
-          <option value="READY FOR PICKUP">Filter: Ready</option>
-          <option value="COMPLETED">Filter: Completed</option>
-        </select>
+        <div className="toolbar-right">
+          <select
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value)}
+            className="toolbar-select"
+          >
+            <option value="DATE_DESC">Sort: Date (Newest)</option>
+            <option value="DATE_ASC">Sort: Date (Oldest)</option>
+            <option value="ID_ASC">Sort: ID (Ascending)</option>
+            <option value="ID_DESC">Sort: ID (Descending)</option>
+            <option value="NAME_ASC">Sort: Name (A-Z)</option>
+            <option value="NAME_DESC">Sort: Name (Z-A)</option>
+            <option value="DOC_ASC">Sort: Document (A-Z)</option>
+            <option value="STATUS_ASC">Sort: Status (Action Needed)</option>
+            <option value="STATUS_DESC">Sort: Status (Completed First)</option>
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="toolbar-select"
+          >
+            <option value="ALL">Filter: All Statuses</option>
+            <option value="PENDING PAYMENT">Filter: Pending</option>
+            <option value="PROCESSING">Filter: Processing</option>
+            <option value="READY FOR PICKUP">Filter: Ready</option>
+            <option value="COMPLETED">Filter: Completed</option>
+          </select>
+
+          <RequestDisplaySelect mode={mode} onChange={setMode} />
+        </div>
       </div>
 
       {/* 3. The Table */}
-      <div className="request-table-wrapper">
+      <div className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}>
         <table className="request-table">
           <thead>
             <tr>
-              <th className="col-id" style={{ width: '12%' }}>ID</th>
-              <th className="col-student" style={{ width: '20%' }}>Student</th>
-              <th className="col-doc" style={{ width: '20%' }}>Document</th>
-              <th className="col-date" style={{ width: '15%' }}>Date</th>
-              <th className="col-clearance" style={{ width: '13%' }}>Clearance</th>
-              <th className="col-status" style={{ width: '12%' }}>Status</th>
-              <th className="col-actions">Actions</th>
+              <th className="col-id" style={{ width: '8%' }}>
+                ID
+              </th>
+              <th className="col-student" style={{ width: '10%' }}>
+                Student
+              </th>
+              <th className="col-doc" style={{ width: '12%' }}>
+                Document
+              </th>
+              <th className="col-date" style={{ width: '8%' }}>
+                Date
+              </th>
+              <th className="col-clearance" style={{ width: '12%', textAlign: 'center' }}>
+                Clearance
+              </th>
+              <th className="col-status" style={{ width: '10%', textAlign: 'center' }}>
+                Status
+              </th>
+              <th className="col-actions" style={{ width: '8%', textAlign: 'right' }}>
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <TableSkeleton columns={7} rows={5} />
             ) : requests.length > 0 ? (
-              requests.map((req) => (
-                <tr key={req.id}>
+              visibleRequests.map((req) => (
+                <tr
+                  key={req.id}
+                  className="request-row-clickable"
+                  tabIndex={0}
+                  aria-label={`View details for request ${req.id}`}
+                  onClick={() => handleViewDetails(req)}
+                  onKeyDown={(event) => {
+                    if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      handleViewDetails(req);
+                    }
+                  }}
+                >
                   <td className="doc-name-cell">
-                    <span className="doc-name">{req.id}</span>
+                    <span className="doc-name">{req.displayId || req.id}</span>
                   </td>
                   <td>
-                    <strong style={{ color: '#212529' }}>{req.studentName}</strong><br/>
-                    <span className="doc-meta">{req.studentId}</span>
+                    <strong style={{ color: '#212529' }}>{req.studentName}</strong>
+                    <br />
+                    <span className="doc-meta">{req.studentId || 'N/A'}</span>
                   </td>
                   <td className="doc-name-cell" title={req.docType} style={{ color: '#495057' }}>
                     {req.docType}
                   </td>
                   <td>{formatDate(req.date || req.dateRequested)}</td>
-                  <td>
-                    <ClearanceBadge isCleared={req.sasoCleared} />
+                  
+                  {/* Center-aligned Clearance Badge Cell */}
+                  <td className="col-clearance-cell" style={{ textAlign: 'center' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <ClearanceBadge isCleared={req.sasoCleared} />
+                    </div>
                   </td>
-                  <td>
-                    <StatusBadge status={req.status} />
+
+                  {/* Center-aligned Status Badge Cell */}
+                  <td className="col-status-cell" style={{ textAlign: 'center' }}>
+                    <div className="status-stack" style={{ alignItems: 'center', justifyContent: 'center' }}>
+                      <StatusBadge status={req.status} />
+                    </div>
                   </td>
+
                   <td className="actions-cell">
-                    <button 
-                      className="actions-button" 
-                      onClick={(e) => toggleMenu(e, req.id)}
+                    <button
+                      type="button"
+                      className="actions-button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleMenu(event, req.id);
+                      }}
                       aria-label="Open Actions Menu"
                       aria-expanded={openMenuId === req.id}
                     >
@@ -160,34 +213,46 @@ function SasoDashboard() {
                 </tr>
               ))
             ) : (
-              // NEW: Reusable Graphic Empty State
-              <TableEmptyState 
-                colSpan={7} 
-                title="No matching requests found" 
-                subtext="Try adjusting your search query." 
+              <TableEmptyState
+                colSpan={7}
+                title="No matching requests found"
+                subtext="Try adjusting your search query or status filter."
               />
             )}
           </tbody>
         </table>
       </div>
 
-      {/* 4. Action Menu */}
+      {/* 4. Pagination */}
+      {!isLoading && mode === 'pagination' && (
+        <RequestPagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          requestsPerPage={requestsPerPage}
+          totalRequests={requests.length}
+          onPageChange={setCurrentPage}
+        />
+      )}
+
+      {/* 5. Context Action Menu */}
       {openMenuId && activeMenuRequest && (
         <div className="actions-menu-fixed" style={menuCoords}>
-          <button onClick={() => handleViewDetails(activeMenuRequest)}>
+          <button type="button" onClick={() => handleViewDetails(activeMenuRequest)}>
             View Request Details
           </button>
-          
-          <div style={{ height: '1px', backgroundColor: 'var(--border-light)', margin: '4px 0' }}></div>
-          
-          <button 
-            style={{ color: 'var(--status-success, #12b886)', fontWeight: '500' }} 
+
+          <div className="actions-menu-divider" />
+
+          <button
+            type="button"
+            className="text-success"
             onClick={() => handleClearanceUpdate(openMenuId, true)}
           >
             Grant Clearance
           </button>
-          <button 
-            style={{ color: 'var(--status-danger, #e03131)', fontWeight: '500' }} 
+          <button
+            type="button"
+            className="text-danger"
             onClick={() => handleClearanceUpdate(openMenuId, false)}
           >
             Place on Hold
@@ -195,13 +260,12 @@ function SasoDashboard() {
         </div>
       )}
 
-      {/* 5. Details Modal */}
-      <RequestDetailsModal 
-        isOpen={!!viewingRequest} 
-        onClose={() => setViewingRequest(null)} 
-        request={viewingRequest} 
+      {/* 6. Details Modal */}
+      <RequestDetailsModal
+        isOpen={!!viewingRequest}
+        onClose={() => setViewingRequest(null)}
+        request={viewingRequest}
       />
-
     </div>
   );
 }

@@ -1,13 +1,13 @@
-import React from 'react';
-
-const Modal = ({ isOpen, onClose, title, children, maxWidth = '420px' }) => {
+const Modal = ({ isOpen, onClose, title, children, maxWidth = '420px', zIndex = 9999 }) => {
   if (!isOpen) return null;
 
   return (
     <div 
       style={{ 
         position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', 
-        backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', 
+        backdropFilter: 'blur(4px)',
+        zIndex,
+        display: 'flex',
         alignItems: 'center', justifyContent: 'center' 
       }}
       onClick={onClose} // Closes when clicking the dark background outside the modal

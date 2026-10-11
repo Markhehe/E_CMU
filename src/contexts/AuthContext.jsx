@@ -1,52 +1,137 @@
-import { createContext, useState, useContext, useMemo, useCallback } from 'react';
+/**
+ * Authentication Context Provider
+ * Handles user session lifecycle, normalized role-based flags, and reactive auth states.
+ */
+
+import { createContext, useState, useContext, useMemo, useCallback, useEffect } from 'react';
+import { AuthService } from '../services/api';
 
 const AuthContext = createContext(null);
+const SESSION_KEY = 'cmu_api_session';
+
+/**
+ * Normalizes user object from API to session structure
+ */
+function toSessionUser(user) {
+  if (!user) return null;
+
+  const roles = user.roles || (user.role ? [user.role] : []);
+  const normalizedRoles = roles.map((r) => String(r).toLowerCase());
+
+  let primaryRole = 'STUDENT';
+  if (normalizedRoles.includes('administrator') || normalizedRoles.includes('admin') || normalizedRoles.includes('registrar')) {
+    primaryRole = 'ADMIN';
+  } else if (normalizedRoles.includes('finance')) {
+    primaryRole = 'FINANCE';
+  } else if (normalizedRoles.includes('saso')) {
+    primaryRole = 'SASO';
+  }
+
+  const name = user.fullName || user.name || user.email || 'User';
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase() || 'U';
+
+  return {
+    id: String(user.id),
+    email: user.email,
+    name,
+    role: primaryRole,
+    rawRoles: roles,
+    initials,
+  };
+}
 
 export const AuthProvider = ({ children }) => {
-  // Check localStorage on initial load to keep users logged in after a refresh
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const savedSession = localStorage.getItem('cmu_session');
+      const savedSession = localStorage.getItem(SESSION_KEY);
       return savedSession ? JSON.parse(savedSession) : null;
-    } catch (error) {
-      console.error("Failed to parse session from local storage:", error);
+    } catch {
       return null;
     }
   });
 
-  // useCallback prevents these functions from being recreated on every render
-  const login = useCallback((userData) => {
-    /**
-     * Expected userData shape:
-     * { id: string, name: string, role: 'ADMIN' | 'STUDENT' }
-     */
-    localStorage.setItem('cmu_session', JSON.stringify(userData));
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Sync / verify session on initial application mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function verifySession() {
+      try {
+        const response = await AuthService.me();
+        if (isMounted && response?.user) {
+          const userData = toSessionUser(response.user);
+          setCurrentUser(userData);
+          localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
+        }
+      } catch {
+        // If session verification fails on server, fallback to local session if present or stay as-is
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    verifySession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const login = useCallback((user) => {
+    const userData = toSessionUser(user);
+    localStorage.setItem(SESSION_KEY, JSON.stringify(userData));
     setCurrentUser(userData);
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('cmu_session');
-    setCurrentUser(null);
+  const logout = useCallback(async () => {
+    try {
+      await AuthService.logout();
+    } catch (error) {
+      console.warn('Server logout notice:', error.message);
+    } finally {
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem('cmu_session');
+      setCurrentUser(null);
+    }
   }, []);
 
-  // useMemo prevents all components consuming this context from 
-  // re-rendering unless currentUser actually changes.
-  const value = useMemo(() => ({
-    currentUser,
-    isAuthenticated: !!currentUser,
-    isAdmin: currentUser?.role === 'ADMIN',
-    login,
-    logout
-  }), [currentUser, login, logout]);
+  const updateUserProfile = useCallback((updatedFields) => {
+    setCurrentUser((prev) => {
+      if (!prev) return null;
+      const updated = { ...prev, ...updatedFields };
+      localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      currentUser,
+      isAuthenticated: !!currentUser,
+      isLoading,
+      // Role Convenience Helpers
+      isAdmin: currentUser?.role === 'ADMIN',
+      isFinance: currentUser?.role === 'FINANCE',
+      isSaso: currentUser?.role === 'SASO',
+      isStudent: currentUser?.role === 'STUDENT',
+      hasRole: (roleName) => currentUser?.role === String(roleName).toUpperCase(),
+      login,
+      logout,
+      updateUserProfile,
+    }),
+    [currentUser, isLoading, login, logout, updateUserProfile]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Custom hook to grab auth data cleanly in any file
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === null) {
