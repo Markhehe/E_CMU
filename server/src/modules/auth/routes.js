@@ -1,0 +1,274 @@
+import { Router } from "express";
+import bcrypt from "bcrypt";
+import { Buffer } from "node:buffer";
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
+import { z } from "zod";
+import { pool } from "../../db/pool.js";
+import { createAccessToken, setAuthCookie } from "../../utils/tokens.js";
+import { requireAuth } from "../../middleware/auth.js";
+import { sendConfirmationEmail } from "../../services/email.js";
+
+const router = Router();
+const credentials = z.object({
+    email: z.string().email().refine(
+        (email) => email.toLowerCase().endsWith("@cityofmalabonuniversity.edu.ph"),
+        { message: "Use your @cityofmalabonuniversity.edu.ph email address" }
+    ),
+    password: z.string().min(8),
+    fullName: z.string().min(2),
+    stakeholderType: z.enum(["student", "professor", "other"]),
+});
+
+router.post("/register", async (req, res, next) => {
+    const parsed = credentials.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({
+            error: parsed.error.issues[0]?.message || "Invalid registration details",
+        });
+    }
+
+    let client;
+    try {
+        const data = parsed.data;
+        const passwordHash = await bcrypt.hash(data.password, 12);
+        const code = String(randomInt(100000, 1000000));
+        const codeHash = createHash("sha256").update(code).digest("hex");
+        client = await pool.connect();
+        await client.query("BEGIN");
+
+        const result = await client.query(
+            `INSERT INTO users (email, password_hash, full_name, stakeholder_type, email_verified)
+            VALUES ($1, $2, $3, $4, FALSE)
+            RETURNING id, email, full_name, stakeholder_type`,
+            [data.email.toLowerCase(), passwordHash, data.fullName, data.stakeholderType]
+        );
+
+        const user = result.rows[0];
+        const role = await client.query("SELECT id FROM roles WHERE name = 'requester'");
+        if (role.rowCount === 0) {
+            throw new Error("Requester role is not configured");
+        }
+        await client.query(
+            "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)",
+            [user.id, role.rows[0].id]
+        );
+        await client.query(
+            `INSERT INTO email_verification_tokens (user_id, code_hash, expires_at, attempts)
+             VALUES ($1, $2, NOW() + INTERVAL '120 seconds', 0)`,
+            [user.id, codeHash]
+        );
+
+        await client.query("COMMIT");
+        client.release();
+        client = undefined;
+
+        try {
+            await sendConfirmationEmail({
+                email: user.email,
+                fullName: user.full_name,
+                code,
+            });
+        } catch (emailError) {
+            console.error("Failed to send account confirmation email:", emailError);
+            return res.status(503).json({
+                error: "Your account was created, but the confirmation email could not be sent. Use the resend confirmation option to try again.",
+            });
+        }
+
+        res.status(201).json({
+            message: "Account created. Check your email to confirm your account before signing in.",
+            email: user.email,
+        });
+    } catch (error) {
+        if (client) await client.query("ROLLBACK");
+        if (error.code === "23505") {
+            return res.status(409).json({ error: "Email is already registered" });
+        }
+        next(error);
+    } finally {
+        client?.release();
+    }
+});
+
+router.post("/verify-email", async (req, res, next) => {
+    const parsed = z.object({
+        email: z.string().email(),
+        code: z.string().regex(/^\d{6}$/),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ error: "Enter your email address and the six-digit verification code" });
+    }
+
+    const codeHash = createHash("sha256").update(parsed.data.code).digest("hex");
+    let client;
+    try {
+        client = await pool.connect();
+        await client.query("BEGIN");
+        const verification = await client.query(
+            `SELECT token.user_id, token.code_hash, token.expires_at, token.attempts,
+                    token.expires_at > NOW() AS code_is_valid
+             FROM email_verification_tokens AS token
+             JOIN users AS account ON account.id = token.user_id
+             WHERE account.email = $1 AND account.email_verified = FALSE
+             FOR UPDATE OF token`,
+            [parsed.data.email.toLowerCase()]
+        );
+        if (verification.rowCount === 0 || !verification.rows[0].code_is_valid) {
+            await client.query("ROLLBACK");
+            return res.status(400).json({ error: "This verification code is invalid or expired. Request a new code and try again." });
+        }
+
+        const record = verification.rows[0];
+        if (record.attempts >= 5) {
+            await client.query("COMMIT");
+            return res.status(429).json({ error: "Too many incorrect codes. Request a new verification code." });
+        }
+
+        const suppliedHash = Buffer.from(codeHash, "hex");
+        const storedHash = Buffer.from(record.code_hash.trim(), "hex");
+        if (!timingSafeEqual(suppliedHash, storedHash)) {
+            await client.query(
+                "UPDATE email_verification_tokens SET attempts = attempts + 1 WHERE user_id = $1",
+                [record.user_id]
+            );
+            await client.query("COMMIT");
+            return res.status(record.attempts + 1 >= 5 ? 429 : 400).json({
+                error: record.attempts + 1 >= 5
+                    ? "Too many incorrect codes. Request a new verification code."
+                    : "The verification code is incorrect.",
+            });
+        }
+
+        await client.query(
+            "UPDATE users SET email_verified = TRUE WHERE id = $1",
+            [record.user_id]
+        );
+        await client.query(
+            "DELETE FROM email_verification_tokens WHERE user_id = $1",
+            [record.user_id]
+        );
+        await client.query("COMMIT");
+        return res.json({ message: "Email confirmed. You can now sign in." });
+    } catch (error) {
+        if (client) await client.query("ROLLBACK");
+        return next(error);
+    } finally {
+        client?.release();
+    }
+});
+
+router.post("/resend-confirmation", async (req, res, next) => {
+    const parsed = z.object({
+        email: z.string().email().refine(
+            (email) => email.toLowerCase().endsWith("@cityofmalabonuniversity.edu.ph"),
+            { message: "Use your @cityofmalabonuniversity.edu.ph email address" }
+        ),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({
+            error: parsed.error.issues[0]?.message || "Invalid email address",
+        });
+    }
+
+    let client;
+    try {
+        client = await pool.connect();
+        await client.query("BEGIN");
+        const result = await client.query(
+            `SELECT id, email, full_name
+             FROM users
+             WHERE email = $1 AND email_verified = FALSE`,
+            [parsed.data.email.toLowerCase()]
+        );
+        if (result.rowCount === 0) {
+            await client.query("COMMIT");
+            return res.json({ message: "If the account needs confirmation, a new email has been sent." });
+        }
+
+        const user = result.rows[0];
+        const code = String(randomInt(100000, 1000000));
+        const codeHash = createHash("sha256").update(code).digest("hex");
+        await client.query(
+            `INSERT INTO email_verification_tokens (user_id, code_hash, expires_at, attempts)
+             VALUES ($1, $2, NOW() + INTERVAL '120 seconds', 0)
+             ON CONFLICT (user_id) DO UPDATE
+             SET code_hash = EXCLUDED.code_hash,
+                 expires_at = EXCLUDED.expires_at,
+                 attempts = 0`,
+            [user.id, codeHash]
+        );
+        await client.query("COMMIT");
+        client.release();
+        client = undefined;
+
+        try {
+            await sendConfirmationEmail({ email: user.email, fullName: user.full_name, code });
+        } catch (emailError) {
+            console.error("Failed to resend account confirmation email:", emailError);
+            return res.status(503).json({
+                error: "The confirmation email could not be sent. Please try again later.",
+            });
+        }
+        return res.json({ message: "If the account needs confirmation, a new email has been sent." });
+    } catch (error) {
+        if (client) await client.query("ROLLBACK");
+        return next(error);
+    } finally {
+        client?.release();
+    }
+});
+
+router.post("/login", async (req, res, next) => {
+    try {
+        const data = z.object({
+            email: z.string().email(),
+            password: z.string(),
+        }).parse(req.body);
+
+        const result = await pool.query(
+            `SELECT u.*,
+                COALESCE(array_agg(r.name) FILTER (WHERE r.name IS NOT NULL), '{}') AS roles
+             FROM users u
+             LEFT JOIN user_roles ur ON ur.user_id = u.id
+             LEFT JOIN roles r ON r.id = ur.role_id
+             WHERE u.email = $1 AND u.active = TRUE
+             GROUP BY u.id`,
+            [data.email.toLowerCase()]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(401).json({ error: "Invalid credentials" });
+        }
+
+        const user = result.rows[0];
+        const valid = await bcrypt.compare(data.password, user.password_hash);
+        if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+        if (!user.email_verified) {
+            return res.status(403).json({ error: "Confirm your email address before signing in." });
+        }
+
+        setAuthCookie(res, createAccessToken(user));
+        res.json({
+            user: {
+                id: user.id,
+                email: user.email,
+                fullName: user.full_name,
+                stakeholderType: user.stakeholder_type,
+                roles: user.roles,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+router.post("/logout", (_req, res) => {
+ res.clearCookie("access_token");
+ res.status(204).end();
+});
+
+router.get("/me", requireAuth, (req, res) => {
+     res.json({ user: req.user });
+});
+
+export default router;
