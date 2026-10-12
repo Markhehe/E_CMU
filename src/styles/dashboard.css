@@ -150,10 +150,21 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   border: 1px solid var(--border-light);
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
   position: relative;
   box-sizing: border-box;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.request-table-wrapper:focus-visible {
+  outline: 2px solid var(--imperial-blue);
+  outline-offset: 2px;
+}
+
+.table-scroll-hint {
+  display: none;
 }
 
 .request-table-wrapper.is-paginated {
@@ -757,70 +768,4 @@
   font-size: 0.8rem;
   color: var(--text-muted);
   margin-top: 0.15rem;
-}
-
-/* =========================================
-   9. CONSOLIDATED MOBILE RESPONSIVENESS
-   ========================================= */
-@media (max-width: 768px) {
-  .dashboard-header-container {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
-  }
-
-  .table-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem;
-  }
-
-  .toolbar-left,
-  .toolbar-right {
-    width: 100%;
-    max-width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .toolbar-select {
-    flex: 1;
-    min-width: 130px;
-  }
-
-  .request-pagination {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .request-pagination-controls {
-    flex-wrap: wrap;
-  }
-
-  .settings-container {
-    flex-direction: column;
-  }
-
-  .settings-sidebar {
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--border-light, #e4e4e7);
-    padding-right: 0;
-    padding-bottom: 0.75rem;
-    flex-direction: row;
-    overflow-x: auto;
-  }
-
-  .settings-tab-btn {
-    flex: 1 1 auto;
-    text-align: center;
-    white-space: nowrap;
-  }
-
-  .settings-profile-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .settings-security-form {
-    max-width: 100%;
-  }
 }

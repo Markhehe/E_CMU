@@ -145,7 +145,14 @@ function AdminDashboard() {
       </div>
 
       {/* 3. The Table */}
-      <div ref={tableWrapperRef} className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}>
+      <p className="table-scroll-hint">Scroll sideways to view all columns</p>
+      <div
+        ref={tableWrapperRef}
+        className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}
+        tabIndex={0}
+        role="region"
+        aria-label="Requests table. Scroll horizontally to view all columns."
+      >
         <table className="request-table">
           <thead>
             <tr>

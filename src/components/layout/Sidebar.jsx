@@ -93,7 +93,7 @@ function Sidebar({ isOpen, onClose }) {
   const currentNav = NAV_CONFIG[role] || NAV_CONFIG.STUDENT;
 
   const handleLinkClick = () => {
-    if (window.innerWidth <= 900 && onClose) {
+    if (window.innerWidth <= 992 && onClose) {
       onClose();
     }
   };

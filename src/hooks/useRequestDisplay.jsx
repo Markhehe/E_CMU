@@ -5,10 +5,19 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useOverlayScrollbars } from 'overlayscrollbars-react';
+import { scrollbarOptions } from '../utils/scrollbarOptions';
 
 export function useRequestDisplay(requests = [], role = 'default', initialPageSize = 5, defaultMode = 'pagination') {
   const storageKey = `cmu_request_display_${role}`;
   const tableWrapperRef = useRef(null);
+  const [initializeScrollbars] = useOverlayScrollbars({
+    options: {
+      ...scrollbarOptions,
+      overflow: { x: 'scroll', y: 'scroll' },
+    },
+    defer: true,
+  });
 
   const [mode, setModeState] = useState(() => {
     try {
@@ -21,6 +30,11 @@ export function useRequestDisplay(requests = [], role = 'default', initialPageSi
 
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    const wrapper = tableWrapperRef.current;
+    if (wrapper) initializeScrollbars(wrapper);
+  }, [initializeScrollbars]);
 
   useEffect(() => {
     const wrapper = tableWrapperRef.current;

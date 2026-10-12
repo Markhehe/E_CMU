@@ -6,7 +6,9 @@
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useAuth } from './contexts/AuthContext';
+import { scrollbarOptions } from './utils/scrollbarOptions';
 
 // Layout Shell Components
 import Sidebar from './components/layout/Sidebar';
@@ -93,7 +95,7 @@ function ProtectedRoute({ allowedRole, allowedRoles, children }) {
  * Encapsulates responsive sidebar drawer, top header bar, and nested page outlet.
  */
 function AppShell() {
-  const SIDEBAR_BREAKPOINT = 900;
+  const SIDEBAR_BREAKPOINT = 992;
   const [isSidebarOpen, setIsSidebarOpen] = useState(
     window.innerWidth > SIDEBAR_BREAKPOINT
   );
@@ -112,9 +114,17 @@ function AppShell() {
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <div className="app-main">
         <PageHeader onMenuClick={() => setIsSidebarOpen((prev) => !prev)} />
-        <main className="main-content">
+        <OverlayScrollbarsComponent
+          element="main"
+          className="main-content"
+          options={{
+            ...scrollbarOptions,
+            overflow: { x: 'hidden', y: 'scroll' },
+          }}
+          defer
+        >
           <Outlet />
-        </main>
+        </OverlayScrollbarsComponent>
       </div>
     </div>
   );

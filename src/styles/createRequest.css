@@ -163,13 +163,3 @@
   color: var(--text-muted);
   font-size: 0.9rem;
 }
-
-/* =========================================
-   MOBILE RESPONSIVENESS
-   ========================================= */
-@media (max-width: 600px) {
-  .form-row {
-    flex-direction: column; /* Stacks Collection and Payment method on phones */
-    gap: var(--space-md);
-  }
-}
