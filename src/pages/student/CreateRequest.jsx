@@ -284,35 +284,17 @@ function SuccessMessage({ data, onReset }) {
         </p>
 
         {isOnline ? (
-          <div
-            style={{
-              margin: '2rem 0',
-              padding: '1.5rem',
-              border: '2px dashed var(--border-light)',
-              borderRadius: '12px',
-            }}
-          >
-            <h3 style={{ marginBottom: '1rem' }}>
-              Scan to Pay: {formatCurrency(data.totalPrice, data.currency)}
-            </h3>
-            <div
-              style={{
-                width: '150px',
-                height: '150px',
-                backgroundColor: '#e9ecef',
-                margin: '0 auto',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: '8px',
-              }}
-            >
-              <span style={{ fontSize: '3rem' }}>📱</span>
-            </div>
-            <p style={{ marginTop: '1rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-              Scan via GCash or Maya. <br />
-              <strong>Once paid, please go to your Dashboard to upload the screenshot.</strong>
+          <div className="success-details" style={{
+            margin: '2rem 0',
+            padding: '1rem',
+            backgroundColor: 'var(--parchment)',
+            borderRadius: '8px',
+          }}>
+            <p>
+              <strong>Online payment:</strong> Once your request is awaiting payment,
+              open its Dashboard actions to view the mock Scan to Pay option and upload your receipt.
             </p>
+            <p><strong>Total Amount:</strong> {formatCurrency(data.totalPrice, data.currency)}</p>
           </div>
         ) : (
           <div

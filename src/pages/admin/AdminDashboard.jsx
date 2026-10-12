@@ -32,6 +32,7 @@ function AdminDashboard() {
 
   const { openMenuId, setOpenMenuId, menuCoords, toggleMenu } = useActionMenu();
   const [viewingRequest, setViewingRequest] = useState(null);
+  const [viewingReceiptRequest, setViewingReceiptRequest] = useState(null);
   const [commentingRequest, setCommentingRequest] = useState(null);
   const [requestToDiscard, setRequestToDiscard] = useState(null);
 
@@ -311,6 +312,17 @@ function AdminDashboard() {
           <button type="button" onClick={() => handleViewDetails(activeMenuRequest)}>
             View Details
           </button>
+          {activeMenuRequest.receiptUrl && (
+            <button
+              type="button"
+              onClick={() => {
+                setViewingReceiptRequest(activeMenuRequest);
+                setOpenMenuId(null);
+              }}
+            >
+              View Receipt
+            </button>
+          )}
           {[
             'submitted',
             'registrar_review',
@@ -368,6 +380,45 @@ function AdminDashboard() {
         onClose={() => setViewingRequest(null)}
         request={viewingRequest}
       />
+      <Modal
+        isOpen={!!viewingReceiptRequest}
+        onClose={() => setViewingReceiptRequest(null)}
+        title="Proof of Payment"
+        maxWidth="560px"
+      >
+        {viewingReceiptRequest && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <p className="modal-text" style={{ margin: 0, textAlign: 'center' }}>
+              Receipt for request{' '}
+              <strong>{viewingReceiptRequest.displayId || viewingReceiptRequest.id}</strong>
+            </p>
+            {viewingReceiptRequest.paymentReference && (
+              <p className="modal-text" style={{ margin: 0 }}>
+                Payment reference: <strong>{viewingReceiptRequest.paymentReference}</strong>
+              </p>
+            )}
+            <a
+              href={viewingReceiptRequest.receiptUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={`Open receipt image for request ${viewingReceiptRequest.displayId || viewingReceiptRequest.id}`}
+              style={{ alignSelf: 'center', maxWidth: '100%' }}
+            >
+              <img
+                src={viewingReceiptRequest.receiptUrl}
+                alt={`Payment receipt for request ${viewingReceiptRequest.displayId || viewingReceiptRequest.id}`}
+                style={{
+                  display: 'block',
+                  maxWidth: '100%',
+                  maxHeight: '65vh',
+                  objectFit: 'contain',
+                  borderRadius: '6px',
+                }}
+              />
+            </a>
+          </div>
+        )}
+      </Modal>
       {commentingRequest && (
         <RequestCommentsModal
           isOpen

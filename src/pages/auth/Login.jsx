@@ -34,7 +34,7 @@ function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  
+
   // Modal Visibility States
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [showResendModal, setShowResendModal] = useState(false);

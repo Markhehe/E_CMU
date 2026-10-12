@@ -177,7 +177,8 @@ router.get("/", requireAuth, async (req, res, next) => {
     const values = isStaff ? [] : [req.user.id];
     const result = await pool.query(
       `SELECT req.*, doc.name AS document_type_name,
-              usr.full_name AS requester_name
+              usr.full_name AS requester_name,
+              usr.email AS requester_email
        FROM requests req
        INNER JOIN document_types doc ON doc.id = req.document_type_id
        INNER JOIN users usr ON usr.id = req.requester_id

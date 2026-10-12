@@ -92,3 +92,55 @@ export async function sendRequestCommentEmail({
         html: `<p>Hello ${safeName},</p><p>A new comment was added to your <strong>${safeDocumentName}</strong> request (<strong>${safeRequestCode}</strong>).</p><p>Sign in to the E-CMU Portal to read it. This email does not include the comment text.</p>`,
     });
 }
+
+export async function sendPaymentReceivedEmail({
+    email,
+    fullName,
+    documentName,
+    requestCode,
+    amount,
+    currency,
+    method,
+    reference,
+    paidAt,
+    receiptDataUrl,
+}) {
+    const transport = createTransport();
+    const safeName = escapeHtml(fullName);
+    const safeDocumentName = escapeHtml(documentName);
+    const safeRequestCode = escapeHtml(requestCode);
+    const safeAmount = escapeHtml(new Intl.NumberFormat("en", {
+        style: "currency",
+        currency,
+    }).format(amount));
+    const safeMethod = escapeHtml(method);
+    const safeReference = reference ? escapeHtml(reference) : "";
+    const safePaidAt = escapeHtml(new Date(paidAt).toLocaleString());
+    const attachments = [];
+    if (receiptDataUrl) {
+        const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(receiptDataUrl);
+        if (!match) {
+            throw new Error("Payment receipt attachment has an invalid image data URL");
+        }
+        const extension = match[1] === "jpeg" ? "jpg" : match[1];
+        attachments.push({
+            filename: `payment-receipt-${safeRequestCode}.${extension}`,
+            content: Buffer.from(match[2], "base64"),
+            contentType: `image/${match[1]}`,
+        });
+    }
+
+    const referenceText = reference ? `\nReference: ${reference}` : "";
+    const referenceHtml = safeReference
+        ? `<p><strong>Payment reference:</strong> ${safeReference}</p>`
+        : "";
+
+    await transport.sendMail({
+        from: process.env.SMTP_FROM,
+        to: email,
+        subject: `Payment received for request ${requestCode}`,
+        text: `Hello ${fullName},\n\nFinance has confirmed receipt of your payment.\n\nRequest: ${requestCode}\nDocument: ${documentName}\nAmount: ${new Intl.NumberFormat("en", { style: "currency", currency }).format(amount)}\nPayment method: ${method}${referenceText}\nConfirmed: ${new Date(paidAt).toLocaleString()}\n\nYour submitted payment receipt is attached when available.`,
+        html: `<p>Hello ${safeName},</p><p>Finance has confirmed receipt of your payment.</p><dl><dt><strong>Request</strong></dt><dd>${safeRequestCode}</dd><dt><strong>Document</strong></dt><dd>${safeDocumentName}</dd><dt><strong>Amount</strong></dt><dd>${safeAmount}</dd><dt><strong>Payment method</strong></dt><dd>${safeMethod}</dd></dl>${referenceHtml}<p><strong>Confirmed:</strong> ${safePaidAt}</p><p>Your submitted payment receipt is attached when available.</p>`,
+        attachments,
+    });
+}

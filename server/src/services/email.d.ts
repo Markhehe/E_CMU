@@ -22,3 +22,16 @@ export function sendRequestCommentEmail(input: {
   documentName: string;
   requestCode: string;
 }): Promise<void>;
+
+export function sendPaymentReceivedEmail(input: {
+  email: string;
+  fullName: string;
+  documentName: string;
+  requestCode: string;
+  amount: number;
+  currency: string;
+  method: string;
+  reference: string | null;
+  paidAt: string;
+  receiptDataUrl?: string;
+}): Promise<void>;

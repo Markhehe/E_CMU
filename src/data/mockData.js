@@ -19,88 +19,88 @@ export const documentCatalog = [
 
 // 2. Request Registry (Matches your document_requests ERD Table)
 export const mockRequests = [
-  { 
-    id: 'REQ-001', 
-    studentId: '2023-0145', 
-    studentName: 'Yuan Atanacio', 
-    docType: 'Transcript of Records (TOR)', 
-    dateRequested: '2026-10-24', 
-    quantity: 1, 
+  {
+    id: 'REQ-001',
+    studentId: '2023-0145',
+    studentName: 'Yuan Atanacio',
+    docType: 'Transcript of Records (TOR)',
+    dateRequested: '2026-10-24',
+    quantity: 1,
     status: 'PENDING PAYMENT',
-    sasoCleared: false, 
+    sasoCleared: false,
     paymentMethod: 'Online',
-    hasReceipt: true 
+    hasReceipt: true
   },
-  { 
-    id: 'REQ-002', 
-    studentId: '2022-0891', 
-    studentName: 'Maria Santos', 
-    docType: 'Certificate of Enrollment', 
-    dateRequested: '2026-10-23', 
-    quantity: 2, 
+  {
+    id: 'REQ-002',
+    studentId: '2022-0891',
+    studentName: 'Maria Santos',
+    docType: 'Certificate of Enrollment',
+    dateRequested: '2026-10-23',
+    quantity: 2,
     status: 'PROCESSING',
-    sasoCleared: true, 
+    sasoCleared: true,
     paymentMethod: 'Pay at the Office',
-    hasReceipt: false 
+    hasReceipt: false
   },
-  { 
-    id: 'REQ-003', 
-    studentId: '2021-0332', 
-    studentName: 'Juan Dela Cruz', 
-    docType: 'Diploma (only issued once)', 
-    dateRequested: '2026-10-20', 
-    quantity: 1, 
+  {
+    id: 'REQ-003',
+    studentId: '2021-0332',
+    studentName: 'Juan Dela Cruz',
+    docType: 'Diploma (only issued once)',
+    dateRequested: '2026-10-20',
+    quantity: 1,
     status: 'READY FOR PICKUP',
-    sasoCleared: true, 
+    sasoCleared: true,
     paymentMethod: 'Online',
-    hasReceipt: true 
+    hasReceipt: true
   },
-  { 
-    id: 'REQ-004', 
-    studentId: '2024-0112', 
-    studentName: 'Anna Reyes', 
-    docType: 'Certificate of GWA', 
-    dateRequested: '2026-10-18', 
-    quantity: 1, 
+  {
+    id: 'REQ-004',
+    studentId: '2024-0112',
+    studentName: 'Anna Reyes',
+    docType: 'Certificate of GWA',
+    dateRequested: '2026-10-18',
+    quantity: 1,
     status: 'READY FOR PICKUP',
-    sasoCleared: true, 
+    sasoCleared: true,
     paymentMethod: 'Pay at the Office',
-    hasReceipt: false 
+    hasReceipt: false
   },
-  { 
-    id: 'REQ-005', 
-    studentId: '2020-0554', 
-    studentName: 'Mark Bautista', 
-    docType: 'Honorable Dismissal', 
-    dateRequested: '2026-10-15', 
-    quantity: 1, 
+  {
+    id: 'REQ-005',
+    studentId: '2020-0554',
+    studentName: 'Mark Bautista',
+    docType: 'Honorable Dismissal',
+    dateRequested: '2026-10-15',
+    quantity: 1,
     status: 'PROCESSING',
-    sasoCleared: true, 
+    sasoCleared: true,
     paymentMethod: 'Online',
-    hasReceipt: true 
+    hasReceipt: true
   },
-  { 
-    id: 'REQ-006', 
-    studentId: '2023-0145', 
-    studentName: 'Yuan Atanacio', 
-    docType: 'Certificate of Grading System', 
-    dateRequested: '2026-10-14', 
-    quantity: 3, 
+  {
+    id: 'REQ-006',
+    studentId: '2023-0145',
+    studentName: 'Yuan Atanacio',
+    docType: 'Certificate of Grading System',
+    dateRequested: '2026-10-14',
+    quantity: 3,
     status: 'PENDING PAYMENT',
-    sasoCleared: false, 
+    sasoCleared: false,
     paymentMethod: 'Online',
-    hasReceipt: false 
+    hasReceipt: false
   },
-  { 
-    id: 'REQ-007', 
-    studentId: '2022-0891', 
-    studentName: 'Maria Santos', 
-    docType: 'Transcript of Records (TOR)', 
-    dateRequested: '2026-10-10', 
-    quantity: 1, 
+  {
+    id: 'REQ-007',
+    studentId: '2022-0891',
+    studentName: 'Maria Santos',
+    docType: 'Transcript of Records (TOR)',
+    dateRequested: '2026-10-10',
+    quantity: 1,
     status: 'CLEARED',
-    sasoCleared: true, 
+    sasoCleared: true,
     paymentMethod: 'Online',
-    hasReceipt: true 
+    hasReceipt: true
   },
 ];

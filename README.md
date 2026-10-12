@@ -24,7 +24,8 @@ npm ci
 Copy `server/.env.example` to `server/.env` and set the database connection
 string, JWT secret, and SMTP settings. Configure `SMTP_HOST`, `SMTP_PORT`,
 `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` with your email
-provider's SMTP credentials so the API can deliver account-confirmation codes.
+provider's SMTP credentials so the API can deliver account-confirmation,
+pickup, comment, and payment confirmation emails.
 Back up an existing database before applying pending migrations, then run:
 
 ```sh
@@ -54,6 +55,21 @@ Requests display a unique six-character hexadecimal code. Their UUID remains
 the internal database and API identifier. Back up the database before applying
 the request display-code migration.
 
+## Payment workflow testing
+
+For an online-payment request awaiting payment, the requester can upload a PNG,
+JPEG, or WebP receipt image (up to 5 MB) and optionally include the payment
+reference. The requester’s actions menu shows a mock Scan to Pay option only
+while the request is awaiting payment. The Finance dashboard displays the proof and lets finance staff
+confirm when payment is received. The Scan to Pay QR remains a mock and does not
+process an online payment. After Finance confirms receipt, the API queues an
+email to the requester with the request code, document, amount, payment method,
+confirmation time, and payment reference. The uploaded receipt image is
+attached when available. Configure the SMTP settings above for email delivery;
+failed deliveries are logged by the API.
+Requesters may switch between online payment and paying at the office while the
+request is still awaiting payment. The method is locked after receipt proof is
+submitted.
+
 Demo accounts use the local `SEED_TEST_PASSWORD` value in `server/.env`. Never
 put the seed password or other credentials in this README or commit them.
-

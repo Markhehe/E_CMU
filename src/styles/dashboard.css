@@ -453,6 +453,16 @@
   color: #218838;
 }
 
+.workflow-step-button.is-payment-action {
+  border-color: #176b59;
+  background: #176b59;
+  color: #fff;
+}
+
+.workflow-step-button.is-payment-action:hover:not(:disabled) {
+  background: #125748;
+}
+
 .workflow-step-button.is-negative {
   border-color: #f1b8bd;
   color: #c82333;
@@ -549,7 +559,7 @@
   background: #f0f2f5;
   background-image: linear-gradient(to right, #f0f2f5 0%, #e4e7eb 20%, #f0f2f5 40%, #f0f2f5 100%);
   background-repeat: no-repeat;
-  background-size: 800px 100%; 
+  background-size: 800px 100%;
   animation: shimmer 1.4s linear infinite forwards;
   border-radius: 4px;
 }
@@ -588,6 +598,146 @@
   font-size: 0.88rem;
   width: 100%;
   box-sizing: border-box;
+}
+
+.payment-reference-input.auth-input {
+  border: 2px solid #64748b;
+  background-color: #fff;
+}
+
+.payment-reference-input.auth-input:focus,
+.payment-reference-input.auth-input:focus-visible {
+  border-color: var(--imperial-blue);
+  box-shadow: 0 0 0 3px rgba(2, 35, 96, 0.2);
+}
+
+.receipt-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+  border: 0;
+}
+
+.receipt-file-input:focus-visible + .receipt-selected-card,
+.receipt-file-input:focus-visible + .receipt-upload-zone {
+  outline: 3px solid rgba(2, 35, 96, 0.35);
+  outline-offset: 3px;
+}
+
+.receipt-upload-zone {
+  display: flex;
+  min-height: 180px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1.25rem;
+  border: 2px dashed #9aa9bd;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #f8fbff, #f3f6fa);
+  color: var(--imperial-blue);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.receipt-upload-zone:hover {
+  border-color: #176b59;
+  background: #f2faf7;
+  transform: translateY(-1px);
+}
+
+.receipt-upload-zone > span:not(.receipt-upload-icon, .receipt-upload-browse) {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.receipt-upload-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e3edf8;
+  color: var(--imperial-blue);
+}
+
+.receipt-upload-icon svg {
+  width: 25px;
+  height: 25px;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.receipt-upload-browse {
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid #176b59;
+  border-radius: 7px;
+  color: #176b59;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.receipt-selected-card {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid #b7d8ca;
+  border-radius: 10px;
+  background: #f3faf6;
+}
+
+.receipt-selected-card > img {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  border: 1px solid #d5e5dc;
+  border-radius: 7px;
+  background: #fff;
+  object-fit: cover;
+}
+
+.receipt-selected-info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.2rem;
+  color: #176b59;
+  font-size: 0.8rem;
+}
+
+.receipt-selected-info span {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.receipt-change-button {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #176b59;
+  border-radius: 7px;
+  color: #176b59;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.receipt-change-button:hover {
+  background: #e2f2e9;
 }
 
 .form-input.role-input {

@@ -51,23 +51,23 @@
 }
 
 /* Custom Status Colors (matching StatusBadge CSS variables) */
-.toast.PENDING-PAYMENT { 
+.toast.PENDING-PAYMENT {
   border-left-color: var(--honey-bronze);
 }
 
-.toast.PROCESSING { 
+.toast.PROCESSING {
   border-left-color: var(--status-processing);
 }
 
 .toast.READY-FOR-PICKUP,
 .toast.CLEARED,
-.toast.success { 
-  border-left-color: var(--status-success); 
+.toast.success {
+  border-left-color: var(--status-success);
 }
 
 .toast.REJECTED,
-.toast.error { 
-  border-left-color: var(--status-danger); 
+.toast.error {
+  border-left-color: var(--status-danger);
 }
 
 /* Fallback */

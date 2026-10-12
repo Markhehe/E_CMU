@@ -5,6 +5,16 @@
  */
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
+const MAX_RECEIPT_SIZE = 5 * 1024 * 1024;
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Unable to read the receipt image.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 /**
  * Universal fetch wrapper with automatic headers and error normalization
@@ -52,7 +62,10 @@ async function apiRequest(path, options = {}) {
     return await response.text();
   } catch (err) {
     if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-      throw new Error('Unable to connect to the server. Please check your network connection.');
+      throw new Error(
+        'Unable to connect to the server. Please check your network connection.',
+        { cause: err }
+      );
     }
     throw err;
   }
@@ -130,12 +143,10 @@ const receiptUrl =
 
   const hasReceipt = Boolean(
     receiptUrl ||
-    paymentReference ||
     additionalDetails.hasReceipt ||
     additionalDetails.has_receipt ||
     request.hasReceipt ||
-    request.has_receipt ||
-    paymentMethod === 'Online'
+    request.has_receipt
   );
 
   return {
@@ -155,6 +166,11 @@ const receiptUrl =
     paymentReference,
     hasReceipt,
     receiptUrl,
+    paymentSentAt: additionalDetails.paymentSentAt || additionalDetails.payment_sent_at || null,
+    paymentConfirmationEmail:
+      additionalDetails.paymentConfirmationEmail ||
+      additionalDetails.payment_confirmation_email ||
+      null,
     purpose: request.purpose || '',
     feeAmount: Number(request.feeAmount ?? request.fee_amount ?? 0),
     feeCurrency: request.feeCurrency || request.fee_currency || 'PHP',
@@ -328,23 +344,32 @@ export const DocumentService = {
     });
   },
 
+  async updateRequestPaymentMethod(requestId, paymentMethod) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/payment-method`, {
+      method: 'POST',
+      body: JSON.stringify({ paymentMethod }),
+    });
+  },
+
   // Workflow Action: Payment Receipt & Reference Submission
   async submitPaymentDetails(requestId, { paymentMethod, paymentReference, receiptFile }) {
-    if (receiptFile) {
-      const formData = new FormData();
-      formData.append('receipt', receiptFile);
-      formData.append('paymentMethod', paymentMethod);
-      if (paymentReference) formData.append('paymentReference', paymentReference);
-
-      return apiRequest(`/requests/${encodeURIComponent(requestId)}/payment`, {
-        method: 'POST',
-        body: formData,
-      });
+    if (!receiptFile) {
+      throw new Error('Choose a receipt image before submitting.');
     }
-
-    return apiRequest(`/requests/${encodeURIComponent(requestId)}/payment`, {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(receiptFile.type)) {
+      throw new Error('Receipt must be a PNG, JPEG, or WebP image.');
+    }
+    if (receiptFile.size > MAX_RECEIPT_SIZE) {
+      throw new Error('Receipt image must be 5 MB or smaller.');
+    }
+    const receiptDataUrl = await readFileAsDataUrl(receiptFile);
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/payment-proof`, {
       method: 'POST',
-      body: JSON.stringify({ paymentMethod, paymentReference }),
+      body: JSON.stringify({
+        paymentMethod,
+        paymentReference,
+        receiptDataUrl,
+      }),
     });
   },
 };

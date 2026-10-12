@@ -4,7 +4,7 @@
  */
 export const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
-  
+
   try {
     return new Intl.DateTimeFormat('en-PH', {
       month: 'short',

@@ -127,7 +127,7 @@ function Settings() {
 
       {/* 2. Main Settings Container */}
       <div className="settings-container">
-        
+
         {/* Settings Navigation Sidebar */}
         <div className="settings-sidebar" role="tablist">
           <button
@@ -163,7 +163,7 @@ function Settings() {
 
         {/* Settings Content Area */}
         <div className="settings-content">
-          
+
           {/* TAB 1: Profile Information */}
           {activeTab === 'profile' && (
             <div>

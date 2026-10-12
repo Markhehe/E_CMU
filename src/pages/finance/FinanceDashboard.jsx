@@ -49,6 +49,7 @@ function FinanceDashboard() {
   const [confirmingPayment, setConfirmingPayment] = useState(null);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [paymentForm, setPaymentForm] = useState({ method: 'cash', providerReference: '' });
+  const [paymentEmailPreview, setPaymentEmailPreview] = useState(null);
 
   // Filter requests relevant to finance verification
   const financeRequests = requests.filter(
@@ -92,7 +93,10 @@ function FinanceDashboard() {
           ? paymentForm.providerReference
           : undefined,
       });
-      if (result) setConfirmingPayment(null);
+      if (result) {
+        setConfirmingPayment(null);
+        setPaymentEmailPreview(result.emailNotification || null);
+      }
     } finally {
       setIsConfirmingPayment(false);
       setOpenMenuId(null);
@@ -231,19 +235,17 @@ function FinanceDashboard() {
                   <td className="col-status-cell" style={{ textAlign: 'center' }}>
                     <div className="status-stack" style={{ alignItems: 'center', justifyContent: 'center' }}>
                       <StatusBadge status={req.status} />
-                      {req.paymentMethod === 'Online' &&
-                        req.hasReceipt &&
-                        req.status === 'PENDING PAYMENT' && (
+                      {req.paymentMethod === 'Online' && req.status === 'PENDING PAYMENT' && (
                           <span
                             style={{
                               fontSize: '0.7rem',
-                              color: '#12b886',
+                              color: req.hasReceipt ? '#12b886' : 'var(--text-muted)',
                               fontWeight: '700',
                               textTransform: 'uppercase',
                               letterSpacing: '0.5px',
                             }}
                           >
-                            Receipt Uploaded
+                            {req.hasReceipt ? 'Payment sent - receipt uploaded' : 'Awaiting requester receipt'}
                           </span>
                         )}
                     </div>
@@ -266,12 +268,21 @@ function FinanceDashboard() {
                         type="button"
                         className="workflow-step-button is-positive"
                         data-action-cooldown="protected"
+                        disabled={
+                          req.paymentMethod === 'Online' &&
+                          !req.hasReceipt
+                        }
+                        title={
+                          req.paymentMethod === 'Online' && !req.hasReceipt
+                            ? 'Awaiting requester payment proof'
+                            : 'Confirm received payment'
+                        }
                         onClick={(event) => {
                           event.stopPropagation();
                           handleVerifyPayment(req);
                         }}
                       >
-                        Confirm payment
+                        Confirm received
                       </button>
                     <button
                       type="button"
@@ -319,7 +330,6 @@ function FinanceDashboard() {
           </button>
 
           {(activeMenuRequest.hasReceipt ||
-            activeMenuRequest.paymentMethod === 'Online' ||
             activeMenuRequest.receiptUrl ||
             activeMenuRequest.paymentReference) && (
             <button type="button" onClick={() =>handleViewReceipt(activeMenuRequest)}>
@@ -407,6 +417,45 @@ function FinanceDashboard() {
         )}
       </Modal>
 
+      <Modal
+        isOpen={!!paymentEmailPreview}
+        onClose={() => setPaymentEmailPreview(null)}
+        title="Payment Confirmation Email"
+        maxWidth="520px"
+      >
+        {paymentEmailPreview && (
+          <div className="modal-form">
+            <p className="modal-text">
+              Payment confirmation email queued for delivery to the requester.
+            </p>
+            <div style={{ display: 'grid', gap: '0.6rem', fontSize: '0.9rem' }}>
+              <div><strong>To:</strong> {paymentEmailPreview.to}</div>
+              <div><strong>Subject:</strong> {paymentEmailPreview.subject}</div>
+              <hr style={{ width: '100%', border: 0, borderTop: '1px solid var(--border-light)' }} />
+              <div>Hello, Finance has confirmed receipt of your payment.</div>
+              <div><strong>Request:</strong> {paymentEmailPreview.requestCode}</div>
+              <div><strong>Document:</strong> {paymentEmailPreview.documentName}</div>
+              <div>
+                <strong>Amount:</strong>{' '}
+                {new Intl.NumberFormat(undefined, {
+                  style: 'currency',
+                  currency: paymentEmailPreview.currency,
+                }).format(paymentEmailPreview.amount)}
+              </div>
+              <div><strong>Payment method:</strong> {paymentEmailPreview.method}</div>
+              {paymentEmailPreview.reference && (
+                <div><strong>Reference:</strong> {paymentEmailPreview.reference}</div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn-primary" onClick={() => setPaymentEmailPreview(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* 7. Proof of Payment Receipt Modal */}
       <Modal
         isOpen={!!viewingReceiptRequest}
@@ -459,7 +508,7 @@ function FinanceDashboard() {
                 }}
               >
                 <span style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📄</span>
-                <strong style={{ color: '#495057', fontSize: '0.95rem' }}>Receipt Attachment Uploaded</strong>
+                <strong style={{ color: '#495057', fontSize: '0.95rem' }}>No receipt image attached</strong>
                 <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
                   Method: {viewingReceiptRequest.paymentMethod}
                   {viewingReceiptRequest.paymentReference && (

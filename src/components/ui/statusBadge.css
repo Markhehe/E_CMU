@@ -16,9 +16,9 @@
   white-space: nowrap; /* Prevents text from breaking onto two lines */
 }
 
-/* 
-   Modern CSS: Using color-mix() to automatically generate a 15% opacity 
-   background directly from your global design tokens. 
+/*
+   Modern CSS: Using color-mix() to automatically generate a 15% opacity
+   background directly from your global design tokens.
 */
 .status-pending {
   background-color: color-mix(in srgb, var(--honey-bronze) 15%, transparent);

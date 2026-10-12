@@ -194,7 +194,7 @@ function SasoDashboard() {
                     {req.docType}
                   </td>
                   <td>{formatDate(req.date || req.dateRequested)}</td>
-                  
+
                   {/* Center-aligned Clearance Badge Cell */}
                   <td className="col-clearance-cell" style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', justifyContent: 'center' }}>

@@ -10,7 +10,7 @@ import './styles/responsive.css'
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <AuthProvider>
-      <ToastProvider> 
+      <ToastProvider>
         <App />
       </ToastProvider>
     </AuthProvider>

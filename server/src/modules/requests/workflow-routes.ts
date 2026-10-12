@@ -17,6 +17,7 @@ import {
 import { requireAuth } from "../../middleware/auth.js";
 import {
   scheduleEmailNotification,
+  sendPaymentReceivedEmail,
   sendReadyForPickupEmail,
   sendRequestCommentEmail,
 } from "../../services/email.js";
@@ -63,13 +64,22 @@ const paymentSchema = z
     }
   });
 
-type WorkflowRequest = Request & {
-  user?: {
-    id: number;
-    full_name: string;
-    roles: string[];
-  };
-};
+const paymentProofSchema = z.object({
+  receiptDataUrl: z
+    .string()
+    .max(7_000_000)
+    .regex(
+      /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
+      "Upload a PNG, JPEG, or WebP receipt image",
+    ),
+  paymentReference: z.string().trim().max(255).optional(),
+});
+
+const paymentMethodSchema = z.object({
+  paymentMethod: z.enum(["Online", "Pay at the Office"]),
+});
+
+type WorkflowRequest = Request;
 
 function requireRole(...allowedRoles: string[]) {
   return async (req: WorkflowRequest, res: Response, next: NextFunction) => {
@@ -371,7 +381,7 @@ router.post(
       }
 
       return res.status(201).json({
-        comment: { ...result.rows[0], author_name: req.user!.full_name },
+        comment: { ...result.rows[0], author_name: req.user!.fullName },
         ...(parsedComment.data.visibility === "requester"
           ? { emailNotificationQueued: true }
           : {}),
@@ -576,6 +586,151 @@ router.post(
 );
 
 router.post(
+  "/:id/payment-method",
+  requireAuth,
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const client = await pool.connect();
+    try {
+      const { id } = requestIdSchema.parse(req.params);
+      const input = paymentMethodSchema.parse(req.body);
+
+      await client.query("BEGIN");
+      const result = await client.query(
+        `SELECT id, status
+         FROM requests
+         WHERE id = $1 AND requester_id = $2
+         FOR UPDATE`,
+        [id, req.user!.id],
+      );
+
+      if (result.rowCount === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Request not found" });
+        return;
+      }
+
+      if (result.rows[0].status !== "awaiting_payment") {
+        await client.query("ROLLBACK");
+        res.status(409).json({
+          error: "Payment method can only be changed before payment proof is submitted",
+        });
+        return;
+      }
+
+      await client.query(
+        `UPDATE requests
+         SET additional_details = COALESCE(additional_details, '{}'::jsonb) || $1::jsonb,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [JSON.stringify({ paymentMethod: input.paymentMethod }), id],
+      );
+
+      await client.query("COMMIT");
+      res.json({ paymentMethod: input.paymentMethod });
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("Failed to roll back payment method update:", rollbackError);
+      }
+      next(error);
+    } finally {
+      client.release();
+    }
+  },
+);
+
+router.post(
+  "/:id/payment-proof",
+  requireAuth,
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const client = await pool.connect();
+    try {
+      const { id } = requestIdSchema.parse(req.params);
+      const input = paymentProofSchema.parse(req.body);
+
+      await client.query("BEGIN");
+      const result = await client.query(
+        `SELECT id, status, additional_details
+         FROM requests
+         WHERE id = $1 AND requester_id = $2
+         FOR UPDATE`,
+        [id, req.user!.id],
+      );
+
+      if (result.rowCount === 0) {
+        await client.query("ROLLBACK");
+        res.status(404).json({ error: "Request not found" });
+        return;
+      }
+
+      const request = result.rows[0];
+      if (!["awaiting_payment", "payment_review"].includes(request.status)) {
+        await client.query("ROLLBACK");
+        res.status(409).json({
+          error: `Payment proof cannot be submitted while request status is ${request.status}`,
+        });
+        return;
+      }
+
+      const paymentMethod = String(
+        request.additional_details?.paymentMethod ??
+          request.additional_details?.payment_method ??
+          "",
+      );
+      if (!/online|gcash/i.test(paymentMethod)) {
+        await client.query("ROLLBACK");
+        res.status(400).json({
+          error: "Payment proof is only available for online payment requests",
+        });
+        return;
+      }
+
+      const uploadedAt = new Date().toISOString();
+      const nextStatus = "payment_review";
+      await client.query(
+        `UPDATE requests
+         SET status = $1,
+             additional_details = COALESCE(additional_details, '{}'::jsonb) || $2::jsonb,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [
+          nextStatus,
+          JSON.stringify({
+            receiptUrl: input.receiptDataUrl,
+            paymentReference: input.paymentReference || null,
+            paymentSentAt: uploadedAt,
+          }),
+          id,
+        ],
+      );
+
+      if (request.status !== nextStatus) {
+        await client.query(
+          `INSERT INTO request_status_history
+             (request_id, from_status, to_status, changed_by, comment)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [id, request.status, nextStatus, req.user!.id, "Requester submitted online payment proof"],
+        );
+      }
+
+      await client.query("COMMIT");
+      res.status(201).json({
+        receiptUrl: input.receiptDataUrl,
+        paymentReference: input.paymentReference || null,
+        paymentSentAt: uploadedAt,
+        status: nextStatus,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      next(error);
+    } finally {
+      client.release();
+    }
+  },
+);
+
+router.post(
   "/:id/payments",
   requireAuth,
   requireRole("finance"),
@@ -586,24 +741,57 @@ router.post(
       const input = paymentSchema.parse(req.body);
       await client.query("BEGIN");
       const result = await client.query(
-        `SELECT id, status, fee_amount, fee_currency
-         FROM requests
-         WHERE id = $1
-         FOR UPDATE`,
+        `SELECT request_row.id, request_row.status, request_row.fee_amount,
+                request_row.fee_currency, request_row.display_code,
+                request_row.additional_details, requester.full_name AS requester_name,
+                requester.email AS requester_email, document_type.name AS document_name
+         FROM requests AS request_row
+         INNER JOIN users AS requester ON requester.id = request_row.requester_id
+         INNER JOIN document_types AS document_type
+           ON document_type.id = request_row.document_type_id
+         WHERE request_row.id = $1
+         FOR UPDATE OF request_row`,
         [id],
       );
 
       if (result.rowCount === 0) {
         await client.query("ROLLBACK");
-        return res.status(404).json({ error: "Request not found" });
+        res.status(404).json({ error: "Request not found" });
+        return;
       }
 
       const request = result.rows[0];
       if (!["awaiting_payment", "payment_review"].includes(request.status)) {
         await client.query("ROLLBACK");
-        return res.status(409).json({
+        res.status(409).json({
           error: `Payment cannot be recorded while request status is ${request.status}`,
         });
+        return;
+      }
+
+      const requestedPaymentMethod = String(
+        request.additional_details?.paymentMethod ??
+          request.additional_details?.payment_method ??
+          "",
+      );
+      const isOnlinePayment = /online|gcash/i.test(requestedPaymentMethod);
+      if (isOnlinePayment && input.method !== "gcash") {
+        await client.query("ROLLBACK");
+        res.status(400).json({
+          error: "Online payment requests must be confirmed as GCash payments",
+        });
+        return;
+      }
+      const receiptUrl =
+        request.additional_details?.receiptUrl ??
+        request.additional_details?.receipt_url ??
+        request.additional_details?.proof_of_payment;
+      if (isOnlinePayment && !receiptUrl) {
+        await client.query("ROLLBACK");
+        res.status(409).json({
+          error: "Requester payment proof must be submitted before confirming receipt",
+        });
+        return;
       }
 
       if (
@@ -611,20 +799,22 @@ router.post(
         Number(request.fee_amount) !== input.amount
       ) {
         await client.query("ROLLBACK");
-        return res.status(400).json({
+        res.status(400).json({
           error: "Payment amount must match the approved request fee",
           expectedAmount: request.fee_amount,
           receivedAmount: input.amount,
         });
+        return;
       }
 
       if (request.fee_currency && request.fee_currency !== input.currency) {
         await client.query("ROLLBACK");
-        return res.status(400).json({
+        res.status(400).json({
           error: "Payment currency must match the request currency",
           expectedCurrency: request.fee_currency,
           receivedCurrency: input.currency,
         });
+        return;
       }
 
       const nextStatus =
@@ -633,6 +823,25 @@ router.post(
           : input.status === "pending"
             ? "payment_review"
             : "awaiting_payment";
+      const emailNotification =
+        input.status === "succeeded"
+          ? {
+              deliveryState: "queued",
+              to: request.requester_email,
+              subject: `Payment received for request ${request.display_code}`,
+              queuedAt: new Date().toISOString(),
+              requestCode: request.display_code,
+              documentName: request.document_name,
+              amount: input.amount,
+              currency: input.currency,
+              method: input.method === "gcash" ? "GCash" : "Cash",
+              reference:
+                input.providerReference ??
+                request.additional_details?.paymentReference ??
+                request.additional_details?.payment_reference ??
+                null,
+            }
+          : null;
       const payment = await client.query(
         `INSERT INTO payments
            (request_id, amount, currency, method, provider, provider_reference,
@@ -653,8 +862,21 @@ router.post(
         ],
       );
       await client.query(
-        `UPDATE requests SET status = $1, updated_at = NOW() WHERE id = $2`,
-        [nextStatus, id],
+        `UPDATE requests
+         SET status = $1,
+             additional_details = CASE
+               WHEN $3::jsonb IS NULL THEN additional_details
+               ELSE COALESCE(additional_details, '{}'::jsonb) || $3::jsonb
+             END,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [
+          nextStatus,
+          id,
+          emailNotification
+            ? JSON.stringify({ paymentConfirmationEmail: emailNotification })
+            : null,
+        ],
       );
       await client.query(
         `INSERT INTO request_status_history
@@ -669,10 +891,53 @@ router.post(
         ],
       );
       await client.query("COMMIT");
-      return res.status(201).json({ payment: payment.rows[0] });
+      if (emailNotification) {
+        const receiptDataUrl =
+          request.additional_details?.receiptUrl ??
+          request.additional_details?.receipt_url ??
+          request.additional_details?.proof_of_payment;
+        scheduleEmailNotification("payment-received", () =>
+          sendPaymentReceivedEmail({
+            email: request.requester_email,
+            fullName: request.requester_name,
+            documentName: request.document_name,
+            requestCode: request.display_code,
+            amount: input.amount,
+            currency: input.currency,
+            method: emailNotification.method,
+            reference: emailNotification.reference,
+            paidAt: emailNotification.queuedAt,
+            receiptDataUrl,
+          }),
+        );
+      }
+      res.status(201).json({
+        payment: payment.rows[0],
+        ...(emailNotification ? { emailNotification } : {}),
+      });
     } catch (error) {
-      await client.query("ROLLBACK");
-      return next(error);
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("Failed to roll back payment confirmation:", rollbackError);
+      }
+
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "23505" &&
+        "constraint" in error &&
+        typeof error.constraint === "string" &&
+        error.constraint.includes("provider_reference")
+      ) {
+        res.status(409).json({
+          error: "This payment reference has already been recorded.",
+        });
+        return;
+      }
+
+      next(error);
     } finally {
       client.release();
     }

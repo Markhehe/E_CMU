@@ -76,7 +76,7 @@ html, body, #root {
 
 .sidebar-divider {
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.15); 
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
   margin: 0 var(--space-lg) var(--space-md);
   flex-shrink: 0;
 }
@@ -145,20 +145,20 @@ html, body, #root {
   background-color: var(--surface-white);
   border-radius: 20px 0 0 20px;
   overflow: hidden;
-  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1); 
+  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
   min-width: 0;
 }
 
 .page-header {
   display: flex;
   align-items: center;
-  justify-content: space-between; 
+  justify-content: space-between;
   height: 55px; /* Fixed header height */
   padding: 0 var(--space-xl);
   background-color: var(--surface-white);
   border-bottom: 1px solid var(--border-light);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  position: relative; 
+  position: relative;
   z-index: 10;
   flex-shrink: 0;
 }
@@ -293,7 +293,7 @@ html, body, #root {
   z-index: 1000;
   display: flex;
   flex-direction: column;
-} 
+}
 
 .header-dropdown-menu button {
   width: 100%;

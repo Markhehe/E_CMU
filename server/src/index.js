@@ -1,4 +1,5 @@
 import "dotenv/config";
+import process from "node:process";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -15,7 +16,7 @@ app.use(
   } )
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "8mb" }));
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
