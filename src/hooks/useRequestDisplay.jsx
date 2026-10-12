@@ -4,10 +4,11 @@
  * Syncs user preferences to localStorage per role.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 export function useRequestDisplay(requests = [], role = 'default', initialPageSize = 5, defaultMode = 'pagination') {
   const storageKey = `cmu_request_display_${role}`;
+  const tableWrapperRef = useRef(null);
 
   const [mode, setModeState] = useState(() => {
     try {
@@ -21,6 +22,44 @@ export function useRequestDisplay(requests = [], role = 'default', initialPageSi
   const [pageSize, setPageSize] = useState(initialPageSize);
   const [currentPage, setCurrentPage] = useState(1);
 
+  useEffect(() => {
+    const wrapper = tableWrapperRef.current;
+    if (!wrapper || mode !== 'pagination') return undefined;
+
+    const updatePageSize = () => {
+      wrapper.style.removeProperty('--request-row-height');
+      const tableHeader = wrapper.querySelector('.request-table thead');
+      const tableRows = Array.from(
+        wrapper.querySelectorAll('.request-table tbody tr:not(.empty-state-row)')
+      );
+      const rowHeights = tableRows
+        .map((row) => row.getBoundingClientRect().height)
+        .filter((height) => height > 0);
+
+      if (!tableHeader || rowHeights.length === 0) return;
+
+      const availableRowsHeight = wrapper.clientHeight - tableHeader.getBoundingClientRect().height;
+      if (availableRowsHeight <= 0) return;
+
+      const tallestRowHeight = Math.max(...rowHeights);
+      const nextPageSize = Math.max(1, Math.floor(availableRowsHeight / tallestRowHeight));
+
+      wrapper.style.setProperty(
+        '--request-row-height',
+        `${availableRowsHeight / nextPageSize}px`,
+      );
+
+      setPageSize((currentPageSize) => (
+        currentPageSize === nextPageSize ? currentPageSize : nextPageSize
+      ));
+    };
+
+    const resizeObserver = new ResizeObserver(updatePageSize);
+    resizeObserver.observe(wrapper);
+
+    return () => resizeObserver.disconnect();
+  }, [mode, requests, currentPage, pageSize]);
+
   // Persist preference changes
   useEffect(() => {
     try {
@@ -32,13 +71,6 @@ export function useRequestDisplay(requests = [], role = 'default', initialPageSi
 
   // Calculate pages dynamically
   const totalPages = Math.max(1, Math.ceil(requests.length / pageSize));
-
-  // Auto-clamp page index if filtering reduces items below current page
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(totalPages);
-    }
-  }, [requests.length, totalPages, currentPage]);
 
   const changeMode = useCallback((nextMode) => {
     setModeState(nextMode);
@@ -63,5 +95,6 @@ export function useRequestDisplay(requests = [], role = 'default', initialPageSi
     setPageSize,
     setCurrentPage,
     totalRecords: requests.length,
+    tableWrapperRef,
   };
 }

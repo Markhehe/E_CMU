@@ -25,9 +25,21 @@
   color: var(--honey-bronze); /* Using your CMU Gold */
 }
 
+.status-pending-review,
+.status-registrar-review,
+.status-saso-review {
+  background-color: color-mix(in srgb, var(--honey-bronze) 15%, transparent);
+  color: var(--honey-bronze);
+}
+
 .status-processing {
   background-color: color-mix(in srgb, var(--status-processing) 15%, transparent);
   color: var(--status-processing);
+}
+
+.status-paid {
+  background-color: color-mix(in srgb, var(--status-success) 15%, transparent);
+  color: var(--status-success);
 }
 
 .status-success {

@@ -12,6 +12,7 @@ import { formatDate } from '../../utils/formatters';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ClearanceBadge from '../../components/ui/ClearanceBadge';
 import RequestDetailsModal from '../../components/ui/RequestDetailsModal';
+import RequestCommentsModal from '../../components/ui/RequestCommentsModal';
 import TableSkeleton from '../../components/ui/TableSkeleton';
 import TableEmptyState from '../../components/ui/TableEmptyState';
 import RequestDisplaySelect from '../../components/ui/RequestDisplaySelect';
@@ -28,6 +29,7 @@ function SasoDashboard() {
     statusFilter,
     setStatusFilter,
     toggleClearance,
+    markCommentsRead,
     sortOption,
     setSortOption,
   } = useRequests();
@@ -42,6 +44,7 @@ function SasoDashboard() {
   }, [debouncedSearch, setSearchTerm]);
 
   const [viewingRequest, setViewingRequest] = useState(null);
+  const [commentingRequest, setCommentingRequest] = useState(null);
 
   const {
     mode,
@@ -51,6 +54,7 @@ function SasoDashboard() {
     totalPages,
     requestsPerPage,
     setCurrentPage,
+    tableWrapperRef,
   } = useRequestDisplay(requests, 'saso', 5, 'pagination');
 
   const activeMenuRequest = requests.find((req) => req.id === openMenuId);
@@ -113,6 +117,8 @@ function SasoDashboard() {
             className="toolbar-select"
           >
             <option value="ALL">Filter: All Statuses</option>
+            <option value="SASO REVIEW">Filter: Awaiting clearance</option>
+            <option value="ON HOLD">Filter: On hold</option>
             <option value="PENDING PAYMENT">Filter: Pending</option>
             <option value="PROCESSING">Filter: Processing</option>
             <option value="READY FOR PICKUP">Filter: Ready</option>
@@ -124,7 +130,7 @@ function SasoDashboard() {
       </div>
 
       {/* 3. The Table */}
-      <div className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}>
+      <div ref={tableWrapperRef} className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}>
         <table className="request-table">
           <thead>
             <tr>
@@ -146,7 +152,7 @@ function SasoDashboard() {
               <th className="col-status" style={{ width: '10%', textAlign: 'center' }}>
                 Status
               </th>
-              <th className="col-actions" style={{ width: '8%', textAlign: 'right' }}>
+              <th className="col-actions" style={{ width: '25%', textAlign: 'right' }}>
                 Actions
               </th>
             </tr>
@@ -197,6 +203,31 @@ function SasoDashboard() {
                   </td>
 
                   <td className="actions-cell">
+                    <div className="workflow-inline-actions">
+                      <button
+                        type="button"
+                        className={`workflow-step-button${req.hasUnreadComments ? ' has-unread-comments' : ''}`}
+                        aria-label={req.hasUnreadComments ? 'Comments, unread comments' : 'Comments'}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setCommentingRequest(req);
+                        }}
+                      >
+                        Comments
+                      </button>
+                      {['registrar_approved', 'saso_review'].includes(req.rawStatus) && (
+                        <button
+                          type="button"
+                          className="workflow-step-button is-positive"
+                          data-action-cooldown="protected"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleClearanceUpdate(req.id, true);
+                          }}
+                        >
+                          Clear
+                        </button>
+                      )}
                     <button
                       type="button"
                       className="actions-button"
@@ -209,6 +240,7 @@ function SasoDashboard() {
                     >
                       ⋮
                     </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -236,27 +268,23 @@ function SasoDashboard() {
 
       {/* 5. Context Action Menu */}
       {openMenuId && activeMenuRequest && (
-        <div className="actions-menu-fixed" style={menuCoords}>
+        <div className="actions-menu-fixed" style={menuCoords} data-action-context={activeMenuRequest.id}>
           <button type="button" onClick={() => handleViewDetails(activeMenuRequest)}>
             View Request Details
           </button>
-
-          <div className="actions-menu-divider" />
-
-          <button
-            type="button"
-            className="text-success"
-            onClick={() => handleClearanceUpdate(openMenuId, true)}
-          >
-            Grant Clearance
-          </button>
-          <button
-            type="button"
-            className="text-danger"
-            onClick={() => handleClearanceUpdate(openMenuId, false)}
-          >
-            Place on Hold
-          </button>
+          {['registrar_approved', 'saso_review'].includes(activeMenuRequest.rawStatus) && (
+            <>
+              <div className="actions-menu-divider" />
+              <button
+                type="button"
+                className="text-danger"
+                data-action-cooldown="protected"
+                onClick={() => handleClearanceUpdate(openMenuId, false)}
+              >
+                Place on Hold
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -266,6 +294,14 @@ function SasoDashboard() {
         onClose={() => setViewingRequest(null)}
         request={viewingRequest}
       />
+      {commentingRequest && (
+        <RequestCommentsModal
+          isOpen
+          onClose={() => setCommentingRequest(null)}
+          request={commentingRequest}
+          onCommentsRead={markCommentsRead}
+        />
+      )}
     </div>
   );
 }

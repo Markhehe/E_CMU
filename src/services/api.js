@@ -60,18 +60,18 @@ async function apiRequest(path, options = {}) {
 
 // System Workflow Status Mappings (Backend Status -> Human Readable UI Badge Label)
 export const STATUS_LABELS = {
-  submitted: 'PENDING PAYMENT',
+  submitted: 'PENDING REVIEW',
+  registrar_review: 'REGISTRAR REVIEW',
   needs_information: 'ON HOLD',
   approved: 'PROCESSING',
-  registrar_review: 'PROCESSING',
-  registrar_approved: 'PROCESSING',
+  registrar_approved: 'SASO REVIEW',
   registrar_rejected: 'REJECTED',
-  saso_review: 'PROCESSING',
-  saso_cleared: 'PROCESSING',
+  saso_review: 'SASO REVIEW',
+  saso_cleared: 'PENDING PAYMENT',
   saso_rejected: 'REJECTED',
   awaiting_payment: 'PENDING PAYMENT',
   payment_review: 'PENDING PAYMENT',
-  paid: 'PROCESSING',
+  paid: 'PAID',
   processing: 'PROCESSING',
   ready: 'READY FOR PICKUP',
   ready_for_retrieval: 'READY FOR PICKUP',
@@ -79,25 +79,6 @@ export const STATUS_LABELS = {
   rejected: 'REJECTED',
   cancelled: 'REJECTED',
 };
-
-// UI Badge Label -> Backend Status Normalizer
-const UI_TO_BACKEND_STATUS = {
-  'PENDING PAYMENT': 'submitted',
-  'PROCESSING': 'processing',
-  'READY FOR PICKUP': 'ready',
-  'COMPLETED': 'fulfilled',
-  'REJECTED': 'rejected',
-  'ON HOLD': 'needs_information',
-};
-
-/**
- * Normalizes UI badge strings or raw strings to backend-compatible status codes
- */
-export function toBackendStatus(status) {
-  if (!status) return 'processing';
-  const upperKey = String(status).trim().toUpperCase();
-  return UI_TO_BACKEND_STATUS[upperKey] || String(status).toLowerCase();
-}
 
 /**
  * Generates clean 6-character fallback Display ID
@@ -179,6 +160,7 @@ const receiptUrl =
     feeCurrency: request.feeCurrency || request.fee_currency || 'PHP',
     collectionMethod: additionalDetails.collectionMethod || 'Pickup',
     rejectionReason: request.rejectionReason || request.rejection_reason || null,
+    hasUnreadComments: Boolean(request.hasUnreadComments ?? request.has_unread_comments),
   };
 }
 
@@ -190,11 +172,10 @@ export const AuthService = {
     });
   },
 
-  async register({ fullName, email, password }) {
+  async register({ email, password }) {
     return apiRequest('/auth/register', {
       method: 'POST',
       body: JSON.stringify({
-        fullName,
         email,
         password,
         stakeholderType: 'student',
@@ -218,6 +199,13 @@ export const AuthService = {
 
   async me() {
     return apiRequest('/auth/me');
+  },
+
+  async updateProfile({ name }) {
+    return apiRequest('/auth/profile', {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    });
   },
 
   async logout() {
@@ -277,18 +265,66 @@ export const DocumentService = {
     return apiRequest(`/requests/${encodeURIComponent(requestId)}/saso-clearance`, {
       method: 'POST',
       body: JSON.stringify({
-        decision: isCleared ? 'approved' : 'rejected',
-        notes,
+        decision: isCleared ? 'approved' : 'needs_information',
+        comment: notes,
       }),
     });
   },
 
-  // Role Action: Generic Request Status Transition (Admin / Registrar / Finance)
-  async updateRequestStatus(requestId, status, reason = '') {
-    const backendStatus = toBackendStatus(status);
-    return apiRequest(`/requests/${encodeURIComponent(requestId)}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: backendStatus, reason }),
+  async submitRegistrarReview(requestId, decision, comment = '') {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/registrar-review`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, comment }),
+    });
+  },
+
+  async confirmRequestPayment(requestId, { method, amount, currency, providerReference }) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/payments`, {
+      method: 'POST',
+      body: JSON.stringify({
+        method,
+        amount,
+        currency,
+        status: 'succeeded',
+        providerReference,
+      }),
+    });
+  },
+
+  async markRequestReadyForPickup(requestId) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/ready-for-pickup`, {
+      method: 'POST',
+    });
+  },
+
+  async markRequestPickedUp(requestId) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/pickup`, {
+      method: 'POST',
+    });
+  },
+
+  async getRequestComments(requestId) {
+    const result = await apiRequest(`/requests/${encodeURIComponent(requestId)}/comments`);
+    return result.comments || [];
+  },
+
+  async addRequestComment(requestId, { comment, visibility }) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ comment, visibility }),
+    });
+  },
+
+  async deleteRequestComment(requestId, commentId) {
+    return apiRequest(
+      `/requests/${encodeURIComponent(requestId)}/comments/${encodeURIComponent(commentId)}`,
+      { method: 'DELETE' }
+    );
+  },
+
+  async markRequestCommentsRead(requestId) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/comments/read`, {
+      method: 'POST',
     });
   },
 

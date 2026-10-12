@@ -10,19 +10,12 @@ const createRequestSchema = z.object({
   purpose: z.string().trim().max(1000).optional(),
   additionalDetails: z.record(z.string(), z.string().max(500)).default({}),
 });
-const requestStatusSchema = z.enum([
-  "PROCESSING",
-  "READY FOR PICKUP",
-  "COMPLETED",
-  "REJECTED",
-]);
-
-const statusValues = {
-  PROCESSING: ["processing"],
-  "READY FOR PICKUP": ["ready_for_retrieval", "ready"],
-  COMPLETED: ["fulfilled"],
-  REJECTED: ["rejected"],
-};
+const requestCommentSchema = z.object({
+  comment: z.string().trim().min(1).max(2000),
+  visibility: z.enum(["requester", "staff"]),
+});
+const commentIdSchema = z.coerce.number().int().positive().safe();
+const staffRoles = ["registrar", "saso", "finance", "administrator"];
 
 router.get("/document-types", requireAuth, async (_req, res, next) => {
   try {
@@ -84,86 +77,97 @@ router.post("/", requireAuth, async (req, res, next) => {
   }
 });
 
-router.patch(
-  "/:id/status",
+router.get("/:id/comments", requireAuth, async (req, res, next) => {
+  const parsedId = requestIdSchema.safeParse(req.params.id);
+  if (!parsedId.success) {
+    return res.status(400).json({ error: "Invalid request ID" });
+  }
+
+  try {
+    const isStaff = req.user.roles.some((role) => staffRoles.includes(role));
+    const result = await pool.query(
+      `SELECT rc.id, rc.author_id, rc.comment, rc.visibility,
+              rc.created_at, author.full_name AS author_name
+       FROM request_comments AS rc
+       INNER JOIN users AS author ON author.id = rc.author_id
+       INNER JOIN requests AS request_row ON request_row.id = rc.request_id
+       WHERE rc.request_id = $1
+         AND ($2::boolean OR request_row.requester_id = $3)
+         AND ($2::boolean OR rc.visibility = 'requester')
+       ORDER BY rc.created_at ASC, rc.id ASC`,
+      [parsedId.data, isStaff, req.user.id],
+    );
+    return res.json({ comments: result.rows });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.delete(
+  "/:id/comments/:commentId",
   requireAuth,
-  requireRole("registrar", "administrator", "finance"), // <--- ADDED "finance" HERE
+  requireRole(...staffRoles),
   async (req, res, next) => {
-    const parsedId = requestIdSchema.safeParse(req.params.id);
-    if (!parsedId.success) {
-      return res.status(400).json({ error: "Invalid request ID" });
+    const parsedRequestId = requestIdSchema.safeParse(req.params.id);
+    const parsedCommentId = commentIdSchema.safeParse(req.params.commentId);
+    if (!parsedRequestId.success || !parsedCommentId.success) {
+      return res.status(400).json({ error: "Invalid comment ID" });
     }
 
-    const parsedStatus = requestStatusSchema.safeParse(req.body?.status);
-    if (!parsedStatus.success) {
-      return res.status(400).json({
-        error: "Status must be PROCESSING, READY FOR PICKUP, COMPLETED, or REJECTED",
-      });
-    }
-
-    const client = await pool.connect();
     try {
-      await client.query("BEGIN");
-      const current = await client.query(
-        "SELECT id, status FROM requests WHERE id = $1 FOR UPDATE",
-        [parsedId.data],
+      const result = await pool.query(
+        `DELETE FROM request_comments
+         WHERE request_id = $1
+           AND id = $2
+           AND author_id = $3`,
+        [parsedRequestId.data, parsedCommentId.data, req.user.id],
       );
-      if (current.rowCount === 0) {
-        await client.query("ROLLBACK");
-        return res.status(404).json({ error: "Request not found" });
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Comment not found" });
       }
-
-      const statusEnums = await client.query(
-        `SELECT enumlabel
-         FROM pg_enum
-         WHERE enumtypid = 'public.request_status'::regtype`,
-      );
-      const availableStatuses = new Set(
-        statusEnums.rows.map(({ enumlabel }) => enumlabel),
-      );
-      const nextStatus = statusValues[parsedStatus.data].find((value) =>
-        availableStatuses.has(value),
-      );
-      if (!nextStatus) {
-        throw new Error(
-          `Database request_status enum does not support ${parsedStatus.data}`,
-        );
-      }
-
-      const previousStatus = current.rows[0].status;
-      const updated = await client.query(
-        `UPDATE requests
-         SET status = $1, updated_at = NOW()
-         WHERE id = $2
-         RETURNING id, status, updated_at`,
-        [nextStatus, parsedId.data],
-      );
-
-      if (previousStatus !== nextStatus) {
-        await client.query(
-          `INSERT INTO request_status_history
-             (request_id, from_status, to_status, changed_by, comment)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [
-            parsedId.data,
-            previousStatus,
-            nextStatus,
-            req.user.id,
-            `Status updated to ${parsedStatus.data}`,
-          ],
-        );
-      }
-
-      await client.query("COMMIT");
-      return res.json({ request: updated.rows[0] });
+      return res.status(204).end();
     } catch (error) {
-      await client.query("ROLLBACK");
       return next(error);
-    } finally {
-      client.release();
     }
   },
 );
+
+router.post("/:id/comments", requireAuth, requireRole(...staffRoles), async (req, res, next) => {
+  const parsedId = requestIdSchema.safeParse(req.params.id);
+  if (!parsedId.success) {
+    return res.status(400).json({ error: "Invalid request ID" });
+  }
+  const parsedComment = requestCommentSchema.safeParse(req.body);
+  if (!parsedComment.success) {
+    return res.status(400).json({
+      error: parsedComment.error.issues[0]?.message || "Invalid comment",
+    });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO request_comments (request_id, author_id, visibility, comment)
+       SELECT request_row.id, $2, $3, $4
+       FROM requests AS request_row
+       WHERE request_row.id = $1
+       RETURNING id, comment, visibility, created_at`,
+      [
+        parsedId.data,
+        req.user.id,
+        parsedComment.data.visibility,
+        parsedComment.data.comment,
+      ],
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Request not found" });
+    }
+    return res.status(201).json({
+      comment: { ...result.rows[0], author_name: req.user.full_name },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
 
 router.get("/", requireAuth, async (req, res, next) => {
   try {

@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import authRoutes from "./modules/auth/routes.js";
+import requestRoutes from "./modules/requests/routes.js";
 import workflowRoutes from "./modules/requests/workflow-routes.ts";
 
 const app = express();
@@ -16,6 +18,8 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+app.use("/api/auth", authRoutes);
+app.use("/api/requests", requestRoutes);
 app.use("/api/requests", workflowRoutes);
 
 app.get("/api/health", (_req, res) => {

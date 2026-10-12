@@ -15,7 +15,6 @@ const credentials = z.object({
         { message: "Use your @cityofmalabonuniversity.edu.ph email address" }
     ),
     password: z.string().min(8),
-    fullName: z.string().min(2),
     stakeholderType: z.enum(["student", "professor", "other"]),
 });
 
@@ -30,6 +29,8 @@ router.post("/register", async (req, res, next) => {
     let client;
     try {
         const data = parsed.data;
+        const normalizedEmail = data.email.toLowerCase();
+        const fullName = normalizedEmail.split("@")[0];
         const passwordHash = await bcrypt.hash(data.password, 12);
         const code = String(randomInt(100000, 1000000));
         const codeHash = createHash("sha256").update(code).digest("hex");
@@ -39,9 +40,20 @@ router.post("/register", async (req, res, next) => {
         const result = await client.query(
             `INSERT INTO users (email, password_hash, full_name, stakeholder_type, email_verified)
             VALUES ($1, $2, $3, $4, FALSE)
+            ON CONFLICT (email) DO UPDATE
+            SET password_hash = EXCLUDED.password_hash,
+                full_name = EXCLUDED.full_name,
+                stakeholder_type = EXCLUDED.stakeholder_type,
+                updated_at = NOW()
+            WHERE users.email_verified = FALSE
             RETURNING id, email, full_name, stakeholder_type`,
-            [data.email.toLowerCase(), passwordHash, data.fullName, data.stakeholderType]
+            [normalizedEmail, passwordHash, fullName, data.stakeholderType]
         );
+
+        if (result.rowCount === 0) {
+            await client.query("ROLLBACK");
+            return res.status(409).json({ error: "Email is already registered" });
+        }
 
         const user = result.rows[0];
         const role = await client.query("SELECT id FROM roles WHERE name = 'requester'");
@@ -49,12 +61,17 @@ router.post("/register", async (req, res, next) => {
             throw new Error("Requester role is not configured");
         }
         await client.query(
-            "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)",
+            `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)
+             ON CONFLICT (user_id, role_id) DO NOTHING`,
             [user.id, role.rows[0].id]
         );
         await client.query(
             `INSERT INTO email_verification_tokens (user_id, code_hash, expires_at, attempts)
-             VALUES ($1, $2, NOW() + INTERVAL '120 seconds', 0)`,
+             VALUES ($1, $2, NOW() + INTERVAL '120 seconds', 0)
+             ON CONFLICT (user_id) DO UPDATE
+             SET code_hash = EXCLUDED.code_hash,
+                 expires_at = EXCLUDED.expires_at,
+                 attempts = 0`,
             [user.id, codeHash]
         );
 
@@ -265,6 +282,43 @@ router.post("/login", async (req, res, next) => {
 router.post("/logout", (_req, res) => {
  res.clearCookie("access_token");
  res.status(204).end();
+});
+
+router.patch("/profile", requireAuth, async (req, res, next) => {
+    const parsed = z.object({
+        name: z.string().trim().min(1).max(255),
+    }).safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({
+            error: parsed.error.issues[0]?.message || "Enter a valid name",
+        });
+    }
+
+    try {
+        const result = await pool.query(
+            `UPDATE users
+             SET full_name = $1, updated_at = NOW()
+             WHERE id = $2 AND active = TRUE
+             RETURNING id, email, full_name, stakeholder_type`,
+            [parsed.data.name, req.user.id],
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "User account not found" });
+        }
+
+        const user = result.rows[0];
+        return res.json({
+            user: {
+                id: user.id,
+                email: user.email,
+                fullName: user.full_name,
+                stakeholderType: user.stakeholder_type,
+                roles: req.user.roles,
+            },
+        });
+    } catch (error) {
+        return next(error);
+    }
 });
 
 router.get("/me", requireAuth, (req, res) => {

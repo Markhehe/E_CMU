@@ -11,6 +11,7 @@ import { useDebounce } from '../../hooks/useDebounce';
 import { formatDate } from '../../utils/formatters';
 import StatusBadge from '../../components/ui/StatusBadge';
 import RequestDetailsModal from '../../components/ui/RequestDetailsModal';
+import RequestCommentsModal from '../../components/ui/RequestCommentsModal';
 import Modal from '../../components/ui/Modal';
 import TableSkeleton from '../../components/ui/TableSkeleton';
 import TableEmptyState from '../../components/ui/TableEmptyState';
@@ -27,7 +28,8 @@ function FinanceDashboard() {
     setSearchTerm,
     statusFilter,
     setStatusFilter,
-    updateStatus,
+    confirmPayment,
+    markCommentsRead,
     sortOption,
     setSortOption,
   } = useRequests();
@@ -42,15 +44,16 @@ function FinanceDashboard() {
   }, [debouncedSearch, setSearchTerm]);
 
   const [viewingRequest, setViewingRequest] = useState(null);
+  const [commentingRequest, setCommentingRequest] = useState(null);
   const [viewingReceiptRequest, setViewingReceiptRequest] = useState(null);
+  const [confirmingPayment, setConfirmingPayment] = useState(null);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
+  const [paymentForm, setPaymentForm] = useState({ method: 'cash', providerReference: '' });
 
   // Filter requests relevant to finance verification
   const financeRequests = requests.filter(
     (req) =>
-      req.status === 'PENDING PAYMENT' ||
-      req.status === 'PROCESSING' ||
-      req.hasReceipt ||
-      req.paymentMethod === 'Online'
+      ['awaiting_payment', 'payment_review'].includes(req.rawStatus)
   );
 
   const {
@@ -61,14 +64,37 @@ function FinanceDashboard() {
     totalPages,
     requestsPerPage,
     setCurrentPage,
+    tableWrapperRef,
   } = useRequestDisplay(financeRequests, 'finance', 5, 'pagination');
 
   const activeMenuRequest = financeRequests.find((req) => req.id === openMenuId);
 
-  const handleVerifyPayment = async (id) => {
+  const handleVerifyPayment = (request) => {
+    const method = /online|gcash/i.test(request.paymentMethod) ? 'gcash' : 'cash';
+    setPaymentForm({
+      method,
+      providerReference: request.paymentReference || '',
+    });
+    setConfirmingPayment(request);
+    setOpenMenuId(null);
+  };
+
+  const handleConfirmPayment = async (event) => {
+    event.preventDefault();
+    if (!confirmingPayment || isConfirmingPayment) return;
+    setIsConfirmingPayment(true);
     try {
-      await updateStatus(id, 'PROCESSING');
+      const result = await confirmPayment(confirmingPayment.id, {
+        method: paymentForm.method,
+        amount: confirmingPayment.feeAmount,
+        currency: confirmingPayment.feeCurrency,
+        providerReference: paymentForm.method === 'gcash'
+          ? paymentForm.providerReference
+          : undefined,
+      });
+      if (result) setConfirmingPayment(null);
     } finally {
+      setIsConfirmingPayment(false);
       setOpenMenuId(null);
     }
   };
@@ -127,8 +153,7 @@ function FinanceDashboard() {
             className="toolbar-select"
           >
             <option value="ALL">Filter: All Payments</option>
-            <option value="PENDING PAYMENT">Filter: Pending</option>
-            <option value="PROCESSING">Filter: Verified</option>
+            <option value="PENDING PAYMENT">Filter: Awaiting payment confirmation</option>
           </select>
 
           <RequestDisplaySelect mode={mode} onChange={setMode} />
@@ -136,7 +161,7 @@ function FinanceDashboard() {
       </div>
 
       {/* 3. The Table */}
-      <div className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}>
+      <div ref={tableWrapperRef} className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}>
         <table className="request-table">
           <thead>
             <tr>
@@ -156,7 +181,7 @@ function FinanceDashboard() {
               <th className="col-status" style={{ width: '10%', textAlign: 'center' }}>
                 Status
               </th>
-              <th className="col-actions" style={{ width: '10%', textAlign: 'right' }}>
+              <th className="col-actions" style={{ width: '25%', textAlign: 'right' }}>
                 Actions
               </th>
             </tr>
@@ -218,6 +243,29 @@ function FinanceDashboard() {
                   </td>
 
                   <td className="actions-cell">
+                    <div className="workflow-inline-actions">
+                      <button
+                        type="button"
+                        className={`workflow-step-button${req.hasUnreadComments ? ' has-unread-comments' : ''}`}
+                        aria-label={req.hasUnreadComments ? 'Comments, unread comments' : 'Comments'}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setCommentingRequest(req);
+                        }}
+                      >
+                        Comments
+                      </button>
+                      <button
+                        type="button"
+                        className="workflow-step-button is-positive"
+                        data-action-cooldown="protected"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleVerifyPayment(req);
+                        }}
+                      >
+                        Confirm payment
+                      </button>
                     <button
                       type="button"
                       className="actions-button"
@@ -230,6 +278,7 @@ function FinanceDashboard() {
                     >
                       ⋮
                     </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -257,7 +306,7 @@ function FinanceDashboard() {
 
       {/* 5. Action Context Menu */}
       {openMenuId && activeMenuRequest && (
-        <div className="actions-menu-fixed" style={menuCoords}>
+        <div className="actions-menu-fixed" style={menuCoords} data-action-context={activeMenuRequest.id}>
           <button type="button" onClick={() => handleViewDetails(activeMenuRequest)}>
             View Request Details
           </button>
@@ -271,15 +320,6 @@ function FinanceDashboard() {
             </button>
           )}
 
-          <div className="actions-menu-divider" />
-
-          <button
-            type="button"
-            className="highlight-action"
-            onClick={() => handleVerifyPayment(openMenuId)}
-          >
-            Verify & Confirm Payment
-          </button>
         </div>
       )}
 
@@ -289,6 +329,76 @@ function FinanceDashboard() {
         onClose={() => setViewingRequest(null)}
         request={viewingRequest}
       />
+      {commentingRequest && (
+        <RequestCommentsModal
+          isOpen
+          onClose={() => setCommentingRequest(null)}
+          request={commentingRequest}
+          onCommentsRead={markCommentsRead}
+        />
+      )}
+
+      <Modal
+        isOpen={!!confirmingPayment}
+        onClose={() => setConfirmingPayment(null)}
+        title="Confirm Received Payment"
+      >
+        {confirmingPayment && (
+          <form className="modal-form" onSubmit={handleConfirmPayment}>
+            <p className="modal-text">
+              Confirm receipt of{' '}
+              <strong>
+                {new Intl.NumberFormat(undefined, {
+                  style: 'currency',
+                  currency: confirmingPayment.feeCurrency || 'PHP',
+                }).format(confirmingPayment.feeAmount)}
+              </strong>{' '}
+              for request <strong>{confirmingPayment.displayId}</strong>.
+            </p>
+            <label className="auth-label" htmlFor="confirmedPaymentMethod">Payment method</label>
+            <select
+              id="confirmedPaymentMethod"
+              className="auth-input"
+              value={paymentForm.method}
+              onChange={(event) => setPaymentForm({ ...paymentForm, method: event.target.value })}
+              disabled={isConfirmingPayment}
+            >
+              <option value="cash">Cash</option>
+              <option value="gcash">GCash</option>
+            </select>
+            {paymentForm.method === 'gcash' && (
+              <>
+                <label className="auth-label" htmlFor="confirmedPaymentReference">GCash reference number</label>
+                <input
+                  id="confirmedPaymentReference"
+                  className="auth-input"
+                  value={paymentForm.providerReference}
+                  onChange={(event) => setPaymentForm({
+                    ...paymentForm,
+                    providerReference: event.target.value,
+                  })}
+                  maxLength={255}
+                  required
+                  disabled={isConfirmingPayment}
+                />
+              </>
+            )}
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={() => setConfirmingPayment(null)} disabled={isConfirmingPayment}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                data-action-cooldown="protected"
+                disabled={isConfirmingPayment || (paymentForm.method === 'gcash' && !paymentForm.providerReference.trim())}
+              >
+                {isConfirmingPayment ? 'CONFIRMING...' : 'Confirm Payment'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       {/* 7. Proof of Payment Receipt Modal */}
       <Modal
@@ -361,17 +471,17 @@ function FinanceDashboard() {
               >
                 Close
               </button>
-              {viewingReceiptRequest.status === 'PENDING PAYMENT' && (
+              {['awaiting_payment', 'payment_review'].includes(viewingReceiptRequest.rawStatus) && (
                 <button
                   type="button"
                   className="btn-primary"
                   style={{ flex: 1 }}
                   onClick={() => {
-                    handleVerifyPayment(viewingReceiptRequest.id);
+                    handleVerifyPayment(viewingReceiptRequest);
                     setViewingReceiptRequest(null);
                   }}
                 >
-                  Confirm Payment
+                  Confirm Received Payment
                 </button>
               )}
             </div>

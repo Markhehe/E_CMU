@@ -105,7 +105,12 @@ export const AuthProvider = ({ children }) => {
   const updateUserProfile = useCallback((updatedFields) => {
     setCurrentUser((prev) => {
       if (!prev) return null;
-      const updated = { ...prev, ...updatedFields };
+      const updated = toSessionUser({
+        ...prev,
+        ...updatedFields,
+        roles: prev.rawRoles,
+        fullName: updatedFields.name ?? prev.name,
+      });
       localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
       return updated;
     });

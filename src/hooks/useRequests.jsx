@@ -64,28 +64,13 @@ export function useRequests() {
     };
   }, [fetchRequests]);
 
-  // Workflow Action: Update Request Status
-  const updateStatus = useCallback(
-    async (id, newStatus, reason = '') => {
-      try {
-        await DocumentService.updateRequestStatus(id, newStatus, reason);
-        addToast(`Request status updated to ${newStatus}.`, 'success');
-        await fetchRequests(false);
-      } catch (err) {
-        addToast(err.message || 'Failed to update request status.', 'error');
-        throw err;
-      }
-    },
-    [fetchRequests, addToast]
-  );
-
   // Workflow Action: Update SASO Clearance
   const toggleClearance = useCallback(
     async (id, isCleared, notes = '') => {
       try {
         await DocumentService.updateSasoClearance(id, isCleared, notes);
         addToast(
-          isCleared ? 'Request cleared by SASO.' : 'Request clearance rejected by SASO.',
+          isCleared ? 'Request cleared by SASO.' : 'Request placed on hold by SASO.',
           isCleared ? 'success' : 'error'
         );
         await fetchRequests(false);
@@ -96,6 +81,68 @@ export function useRequests() {
     },
     [fetchRequests, addToast]
   );
+
+  const runWorkflowAction = useCallback(
+    async (action, successMessage) => {
+      try {
+        const result = await action();
+        addToast(result?.message || successMessage, 'success');
+        await fetchRequests(false);
+        return result;
+      } catch (err) {
+        addToast(err.message || 'Failed to update the request workflow.', 'error');
+        return null;
+      }
+    },
+    [fetchRequests, addToast]
+  );
+
+  const reviewAsRegistrar = useCallback(
+    (id, decision, comment = '') =>
+      runWorkflowAction(
+        () => DocumentService.submitRegistrarReview(id, decision, comment),
+        `Registrar review recorded: ${decision}.`
+      ),
+    [runWorkflowAction]
+  );
+
+  const confirmPayment = useCallback(
+    (id, payment) =>
+      runWorkflowAction(
+        () => DocumentService.confirmRequestPayment(id, payment),
+        'Payment confirmed.'
+      ),
+    [runWorkflowAction]
+  );
+
+  const markReadyForPickup = useCallback(
+    (id) =>
+      runWorkflowAction(
+        () => DocumentService.markRequestReadyForPickup(id),
+        'Request marked ready for pickup.'
+      ),
+    [runWorkflowAction]
+  );
+
+  const markPickedUp = useCallback(
+    (id) =>
+      runWorkflowAction(
+        () => DocumentService.markRequestPickedUp(id),
+        'Document pickup recorded.'
+      ),
+    [runWorkflowAction]
+  );
+
+  const markCommentsRead = useCallback(async (requestId) => {
+    await DocumentService.markRequestCommentsRead(requestId);
+    setRequests((currentRequests) =>
+      currentRequests.map((request) =>
+        request.id === requestId
+          ? { ...request, hasUnreadComments: false }
+          : request
+      )
+    );
+  }, []);
 
   // Filter and Sort Processing Pipeline
   const processedRequests = useMemo(() => {
@@ -158,7 +205,11 @@ export function useRequests() {
     sortOption,
     setSortOption,
     refreshRequests: () => fetchRequests(false),
-    updateStatus,
     toggleClearance,
+    reviewAsRegistrar,
+    confirmPayment,
+    markReadyForPickup,
+    markPickedUp,
+    markCommentsRead,
   };
 }

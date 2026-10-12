@@ -21,6 +21,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import FinanceDashboard from './pages/finance/FinanceDashboard';
 import SasoDashboard from './pages/saso/SasoDashboard';
 import Settings from './pages/Settings';
+import ActionCooldown from './components/ui/ActionCooldown';
 
 /**
  * Normalizes role strings and returns the primary home dashboard route.
@@ -127,6 +128,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ActionCooldown />
       <Routes>
         {/* =========================================
             AUTHENTICATION ROUTE

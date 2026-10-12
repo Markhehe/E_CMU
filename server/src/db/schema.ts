@@ -195,6 +195,27 @@ export const requestReviews = pgTable(
   (table) => [index("request_reviews_request_idx").on(table.requestId)],
 );
 
+export const requestComments = pgTable(
+  "request_comments",
+  {
+    id: bigint("id", { mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity(),
+    requestId: uuid("request_id")
+      .notNull()
+      .references(() => requests.id, { onDelete: "cascade" }),
+    authorId: bigint("author_id", { mode: "number" })
+      .notNull()
+      .references(() => users.id),
+    visibility: varchar("visibility", { length: 20 }).notNull(),
+    comment: text("comment").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("request_comments_request_idx").on(table.requestId, table.createdAt)],
+);
+
 export const requestStatusHistory = pgTable(
   "request_status_history",
   {
@@ -344,6 +365,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   roles: many(userRoles),
   requests: many(requests),
   reviews: many(requestReviews),
+  requestComments: many(requestComments),
   paymentsConfirmed: many(payments),
   notifications: many(notifications),
 }));
@@ -358,6 +380,7 @@ export const requestsRelations = relations(requests, ({ one, many }) => ({
     references: [documentTypes.id],
   }),
   reviews: many(requestReviews),
+  comments: many(requestComments),
   history: many(requestStatusHistory),
   payments: many(payments),
   files: many(requestFiles),

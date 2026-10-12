@@ -331,7 +331,7 @@ function VerificationCodeForm({
  * Registration Modal Component
  */
 function RegistrationModal({ isOpen, onClose }) {
-  const [regData, setRegData] = useState({ name: '', email: '', password: '' });
+  const [regData, setRegData] = useState({ email: '', password: '', confirmPassword: '' });
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState('');
@@ -343,6 +343,10 @@ function RegistrationModal({ isOpen, onClose }) {
 
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
+    if (regData.password !== regData.confirmPassword) {
+      addToast('Passwords do not match.', 'error');
+      return;
+    }
     if (!regData.email.toLowerCase().endsWith('@cityofmalabonuniversity.edu.ph')) {
       addToast('Use your @cityofmalabonuniversity.edu.ph email address.', 'error');
       return;
@@ -351,7 +355,6 @@ function RegistrationModal({ isOpen, onClose }) {
     setIsRegistering(true);
     try {
       const result = await AuthService.register({
-        fullName: regData.name,
         email: regData.email,
         password: regData.password,
       });
@@ -383,7 +386,7 @@ function RegistrationModal({ isOpen, onClose }) {
   };
 
   const handleModalClose = () => {
-    setRegData({ name: '', email: '', password: '' });
+    setRegData({ email: '', password: '', confirmPassword: '' });
     setConfirmationEmail('');
     setEmailVerified(false);
     setEmailDeliveryIssue(false);
@@ -411,21 +414,6 @@ function RegistrationModal({ isOpen, onClose }) {
         )
       ) : (
         <form onSubmit={handleRegisterSubmit} className="auth-form">
-          <div className="form-field-group">
-            <label htmlFor="regName" className="auth-label">Full Name</label>
-            <input
-              id="regName"
-              type="text"
-              className="auth-input"
-              placeholder="e.g., Juan Dela Cruz"
-              value={regData.name}
-              onChange={(e) => setRegData({ ...regData, name: e.target.value })}
-              autoComplete="name"
-              required
-              disabled={isRegistering}
-            />
-          </div>
-
           <div className="form-field-group">
             <label htmlFor="regEmail" className="auth-label">University Email</label>
             <input
@@ -455,6 +443,7 @@ function RegistrationModal({ isOpen, onClose }) {
                 value={regData.password}
                 onChange={(e) => setRegData({ ...regData, password: e.target.value })}
                 autoComplete="new-password"
+                minLength={8}
                 required
                 disabled={isRegistering}
               />
@@ -467,6 +456,22 @@ function RegistrationModal({ isOpen, onClose }) {
                 {showRegPassword ? <EyeOffIcon /> : <EyeIcon />}
               </button>
             </div>
+          </div>
+
+          <div className="form-field-group">
+            <label htmlFor="regConfirmPassword" className="auth-label">Confirm Password</label>
+            <input
+              id="regConfirmPassword"
+              type="password"
+              className="auth-input"
+              placeholder="Re-enter your password"
+              value={regData.confirmPassword}
+              onChange={(e) => setRegData({ ...regData, confirmPassword: e.target.value })}
+              autoComplete="new-password"
+              minLength={8}
+              required
+              disabled={isRegistering}
+            />
           </div>
 
           <button type="submit" className="auth-button" disabled={isRegistering}>

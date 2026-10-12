@@ -5,6 +5,10 @@ import type { PoolClient } from "pg";
 import { db, pool } from "../../db/index.js";
 import { documentTypes } from "../../db/schema.js";
 import { createRequestSchema } from "./validation.js";
+import {
+    scheduleEmailNotification,
+    sendReadyForPickupEmail,
+} from "../../services/email.js";
 
 const adminStatusSchema = z.enum([
     "PROCESSING",
@@ -172,13 +176,26 @@ export async function listDocumentRequests(
                 req.fee_currency AS "feeCurrency",
                 req.submitted_at AS "submittedAt",
                 req.updated_at AS "updatedAt",
-                doc.name AS "documentTypeName"
+                doc.name AS "documentTypeName",
+                EXISTS (
+                    SELECT 1
+                    FROM request_comments AS comment_row
+                    WHERE comment_row.request_id = req.id
+                      AND comment_row.author_id <> $1
+                      AND ($2::boolean OR comment_row.visibility = 'requester')
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM request_comment_reads AS comment_read
+                          WHERE comment_read.comment_id = comment_row.id
+                            AND comment_read.user_id = $1
+                      )
+                ) AS "hasUnreadComments"
              FROM requests AS req
              INNER JOIN document_types AS doc ON doc.id = req.document_type_id
              INNER JOIN users AS usr ON usr.id = req.requester_id
              ${canListAll ? "" : "WHERE req.requester_id = $1"}
              ORDER BY req.submitted_at DESC`,
-            canListAll ? [] : [req.user.id],
+            [req.user.id, canListAll],
         );
 
         return res.json({ requests: result.rows });
@@ -210,7 +227,13 @@ export async function updateDocumentRequestStatus(
         const connection = client;
         await connection.query("BEGIN");
         const current = await connection.query(
-            "SELECT id, status FROM requests WHERE id = $1 FOR UPDATE",
+            `SELECT request.id, request.status, request.display_code, account.email,
+                    account.full_name, document.name AS document_name
+             FROM requests AS request
+             INNER JOIN users AS account ON account.id = request.requester_id
+             INNER JOIN document_types AS document ON document.id = request.document_type_id
+             WHERE request.id = $1
+             FOR UPDATE OF request`,
             [parsedId.data],
         );
         if (current.rowCount === 0) {
@@ -260,7 +283,24 @@ export async function updateDocumentRequestStatus(
         }
 
         await connection.query("COMMIT");
-        return res.json({ request: updated.rows[0] });
+        const emailNotificationQueued =
+            previousStatus !== nextStatus &&
+            ["ready_for_retrieval", "ready"].includes(nextStatus);
+        if (emailNotificationQueued) {
+            const request = current.rows[0];
+            scheduleEmailNotification("ready-for-pickup", () =>
+                sendReadyForPickupEmail({
+                    email: request.email,
+                    fullName: request.full_name,
+                    documentName: request.document_name,
+                    requestCode: request.display_code,
+                }),
+            );
+        }
+        return res.json({
+            request: updated.rows[0],
+            ...(emailNotificationQueued ? { emailNotificationQueued: true } : {}),
+        });
     } catch (error) {
         if (client) {
             await client.query("ROLLBACK");

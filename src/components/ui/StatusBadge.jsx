@@ -2,7 +2,11 @@ import './statusBadge.css';
 
 // Keys converted to lowercase for foolproof case-insensitive matching
 const statusStyles = {
+  'pending review': 'status-pending-review',
+  'registrar review': 'status-registrar-review',
+  'saso review': 'status-saso-review',
   'pending payment': 'status-pending',
+  'paid': 'status-paid',
   'pending clearance': 'status-pending', 
   'processing': 'status-processing',
   'ready for pickup': 'status-success',

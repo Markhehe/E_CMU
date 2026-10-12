@@ -4,7 +4,6 @@
  * payment details, clearance status, and request purpose.
  */
 
-import React from 'react';
 import Modal from './Modal';
 import StatusBadge from './StatusBadge';
 import ClearanceBadge from './ClearanceBadge';
@@ -136,34 +135,6 @@ const RequestDetailsModal = ({ isOpen, onClose, request }) => {
           </p>
         </div>
 
-        {/* Rejection Reason Notice (If Rejected) */}
-        {request.rejectionReason && (
-          <div
-            className="rejection-box"
-            style={{
-              padding: '0.85rem 1rem',
-              backgroundColor: '#fff5f5',
-              borderRadius: '8px',
-              border: '1px solid #ffc9c9',
-            }}
-          >
-            <span
-              style={{
-                display: 'block',
-                fontSize: '0.78rem',
-                fontWeight: '700',
-                color: '#e03131',
-                textTransform: 'uppercase',
-                marginBottom: '0.35rem',
-              }}
-            >
-              Rejection Reason
-            </span>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#c92a2a', lineHeight: 1.4 }}>
-              {request.rejectionReason}
-            </p>
-          </div>
-        )}
       </div>
     </Modal>
   );

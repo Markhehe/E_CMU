@@ -135,6 +135,7 @@ function CreateRequest({ embedded = false, onRequestCreated }) {
       <form
         className={`request-form card-ui${embedded ? ' request-form-embedded' : ''}`}
         onSubmit={handleSubmit}
+        data-action-cooldown="protected"
         noValidate
       >
         {/* Document Type Selection */}

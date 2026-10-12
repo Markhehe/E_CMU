@@ -158,6 +158,18 @@
 
 .request-table-wrapper.is-paginated {
   max-height: none;
+  overflow-y: hidden;
+}
+
+.request-table-wrapper.is-paginated .request-table tbody tr:not(.empty-state-row) {
+  height: var(--request-row-height);
+}
+
+.request-table-wrapper.is-paginated .request-table tbody td {
+  height: var(--request-row-height);
+  box-sizing: border-box;
+  overflow: hidden;
+  vertical-align: middle;
 }
 
 .request-table {
@@ -380,7 +392,63 @@
   text-align: right;
 }
 
+.workflow-inline-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.workflow-step-button {
+  flex: 0 0 8.5rem;
+  width: 8.5rem;
+  position: relative;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--surface-white);
+  color: var(--imperial-blue);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workflow-step-button.has-unread-comments::after {
+  content: '';
+  position: absolute;
+  top: 0.2rem;
+  right: 0.25rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #dc3545;
+  box-shadow: 0 0 0 2px var(--surface-white);
+}
+
+.workflow-step-button:hover:not(:disabled) {
+  background: #eef2ff;
+}
+
+.workflow-step-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.workflow-step-button.is-positive {
+  border-color: #b7dfc2;
+  color: #218838;
+}
+
+.workflow-step-button.is-negative {
+  border-color: #f1b8bd;
+  color: #c82333;
+}
+
 .actions-button {
+  flex: 0 0 auto;
   background: none;
   border: none;
   font-size: 1.2rem;

@@ -7,6 +7,7 @@ import { formatDate } from '../../utils/formatters';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ClearanceBadge from '../../components/ui/ClearanceBadge';
 import RequestDetailsModal from '../../components/ui/RequestDetailsModal';
+import RequestCommentsModal from '../../components/ui/RequestCommentsModal';
 import Modal from '../../components/ui/Modal';
 import TableSkeleton from '../../components/ui/TableSkeleton';
 import TableEmptyState from '../../components/ui/TableEmptyState';
@@ -18,13 +19,14 @@ import '../../styles/dashboard.css';
 
 function Dashboard() {
   const { currentUser } = useAuth();
-  const { requests, isLoading, refreshRequests } = useRequests();
+  const { requests, isLoading, refreshRequests, markCommentsRead } = useRequests();
   const { openMenuId, setOpenMenuId, menuCoords, toggleMenu } = useActionMenu();
   const { addToast } = useToast();
 
   const [uploadingRequestId, setUploadingRequestId] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [viewingRequest, setViewingRequest] = useState(null); 
+  const [commentingRequest, setCommentingRequest] = useState(null);
   const [isCreateRequestOpen, setIsCreateRequestOpen] = useState(false);
 
   // File Upload Preview States
@@ -56,7 +58,8 @@ function Dashboard() {
     currentPage,
     totalPages,
     requestsPerPage,
-    setCurrentPage
+    setCurrentPage,
+    tableWrapperRef,
   } = useRequestDisplay(studentRequests, 'student', 5, 'pagination');
 
   const activeMenuRequest = studentRequests.find(req => req.id === openMenuId);
@@ -108,15 +111,15 @@ function Dashboard() {
       </header>
 
       {/* 2. The Table */}
-      <div className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}>
+      <div ref={tableWrapperRef} className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}>
         <table className="request-table">
           <thead>
             <tr>
-              <th className="col-doc" style={{ width: '30%' }}>Document</th>
-              <th className="col-date" style={{ width: '18%' }}>Date Requested</th>
-              <th className="col-clearance" style={{ width: '20%' }}>SASO Clearance</th>
-              <th className="col-status" style={{ width: '22%' }}>Payment &amp; Status</th>
-              <th className="col-actions" style={{ width: '10%', textAlign: 'right' }}>Actions</th>
+              <th className="col-doc" style={{ width: '26%' }}>Document</th>
+              <th className="col-date" style={{ width: '16%' }}>Date Requested</th>
+              <th className="col-clearance" style={{ width: '18%' }}>SASO Clearance</th>
+              <th className="col-status" style={{ width: '15%' }}>Payment &amp; Status</th>
+              <th className="col-actions" style={{ width: '25%', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -168,6 +171,18 @@ function Dashboard() {
                     </div>
                   </td>
                   <td className="actions-cell">
+                    <div className="workflow-inline-actions">
+                      <button
+                        type="button"
+                        className={`workflow-step-button${req.hasUnreadComments ? ' has-unread-comments' : ''}`}
+                        aria-label={req.hasUnreadComments ? 'Comments, unread comments' : 'Comments'}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setCommentingRequest(req);
+                        }}
+                      >
+                        Comments
+                      </button>
                     <button
                       type="button"
                       className="actions-button"
@@ -178,6 +193,7 @@ function Dashboard() {
                     >
                       ⋮
                     </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -219,6 +235,14 @@ function Dashboard() {
         onClose={() => setViewingRequest(null)} 
         request={viewingRequest} 
       />
+      {commentingRequest && (
+        <RequestCommentsModal
+          isOpen
+          onClose={() => setCommentingRequest(null)}
+          request={commentingRequest}
+          onCommentsRead={markCommentsRead}
+        />
+      )}
 
       <Modal
         isOpen={isCreateRequestOpen}
@@ -241,7 +265,7 @@ function Dashboard() {
         <p className="modal-text">
           Please attach your GCash or Bank Transfer proof of payment for request <strong>{uploadingRequestId}</strong>.
         </p>
-        <form className="modal-form" onSubmit={handleUploadSubmit}>
+        <form className="modal-form" onSubmit={handleUploadSubmit} data-action-cooldown="protected">
           {previewUrl && (
             <div style={{ 
               width: '100%', 

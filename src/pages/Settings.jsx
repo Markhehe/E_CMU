@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { AuthService } from '../services/api';
 import '../styles/dashboard.css';
 
 // SVG Icons for Settings Navigation
@@ -32,9 +33,11 @@ const BellIcon = () => (
 );
 
 function Settings() {
-  const { currentUser } = useAuth();
+  const { currentUser, updateUserProfile } = useAuth();
   const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState('profile');
+  const [name, setName] = useState(currentUser?.name || '');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Security Tab Form State
   const [currentPassword, setCurrentPassword] = useState('');
@@ -45,6 +48,27 @@ function Settings() {
   // Preferences Form State
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [smsNotifs, setSmsNotifs] = useState(false);
+
+  const handleProfileUpdate = async (event) => {
+    event.preventDefault();
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      addToast('Name cannot be empty.', 'error');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      const result = await AuthService.updateProfile({ name: normalizedName });
+      setName(result.user.fullName);
+      updateUserProfile({ name: result.user.fullName });
+      addToast('Name updated successfully.', 'success');
+    } catch (error) {
+      addToast(error.message || 'Failed to update name.', 'error');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   // Password Update Submit Handler
   const handlePasswordUpdate = async (e) => {
@@ -146,41 +170,54 @@ function Settings() {
               <h2 className="settings-section-title">Profile Information</h2>
               <hr className="settings-divider" />
 
-              <div className="settings-profile-grid">
-                <div>
-                  <label className="settings-label">Full Name</label>
-                  <input
-                    type="text"
-                    value={currentUser?.name || currentUser?.fullName || 'University User'}
-                    className="form-input"
-                    disabled
-                  />
+              <form onSubmit={handleProfileUpdate} data-action-cooldown="protected">
+                <div className="settings-profile-grid">
+                  <div>
+                    <label className="settings-label" htmlFor="profileName">Name</label>
+                    <input
+                      id="profileName"
+                      type="text"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      className="form-input"
+                      maxLength={255}
+                      autoComplete="name"
+                      required
+                      disabled={isSavingProfile}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="settings-label">Role</label>
+                    <input
+                      type="text"
+                      value={currentUser?.role || 'Student'}
+                      className="form-input role-input"
+                      disabled
+                    />
+                  </div>
+
+                  <div className="full-width-col">
+                    <label className="settings-label">Email Address</label>
+                    <input
+                      type="email"
+                      value={currentUser?.email || 'user@cityofmalabonuniversity.edu.ph'}
+                      className="form-input"
+                      disabled
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="settings-label">Role</label>
-                  <input
-                    type="text"
-                    value={currentUser?.role || 'Student'}
-                    className="form-input role-input"
-                    disabled
-                  />
+                <div className="modal-actions" style={{ marginTop: '1rem' }}>
+                  <button type="submit" className="btn-primary" disabled={isSavingProfile || !name.trim()}>
+                    {isSavingProfile ? 'Saving...' : 'Save Name'}
+                  </button>
                 </div>
-
-                <div className="full-width-col">
-                  <label className="settings-label">Email Address</label>
-                  <input
-                    type="email"
-                    value={currentUser?.email || 'user@cityofmalabonuniversity.edu.ph'}
-                    className="form-input"
-                    disabled
-                  />
-                </div>
-              </div>
+              </form>
 
               <div className="settings-callout-box">
                 <p className="settings-note">
-                  <strong>* Note:</strong> Profile information is synchronized with the official university registrar database. To request corrections to your name or student ID, please contact the Management Information Systems (MIS) office.
+                  <strong>* Note:</strong> Your default name is taken from the part of your university email address before @. You can change the name displayed in the portal here. Your email address and student ID remain unchanged.
                 </p>
               </div>
             </div>
@@ -192,7 +229,11 @@ function Settings() {
               <h2 className="settings-section-title">Security & Password</h2>
               <hr className="settings-divider" />
 
-              <form onSubmit={handlePasswordUpdate} className="settings-security-form">
+              <form
+                onSubmit={handlePasswordUpdate}
+                className="settings-security-form"
+                data-action-cooldown="protected"
+              >
                 <div className="form-field-group">
                   <label className="settings-label" htmlFor="currentPassword">Current Password</label>
                   <input
