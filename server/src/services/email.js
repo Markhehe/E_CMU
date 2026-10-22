@@ -139,8 +139,8 @@ export async function sendPaymentReceivedEmail({
         from: process.env.SMTP_FROM,
         to: email,
         subject: `Payment received for request ${requestCode}`,
-        text: `Hello ${fullName},\n\nFinance has confirmed receipt of your payment.\n\nRequest: ${requestCode}\nDocument: ${documentName}\nAmount: ${new Intl.NumberFormat("en", { style: "currency", currency }).format(amount)}\nPayment method: ${method}${referenceText}\nConfirmed: ${new Date(paidAt).toLocaleString()}\n\nYour submitted payment receipt is attached when available.`,
-        html: `<p>Hello ${safeName},</p><p>Finance has confirmed receipt of your payment.</p><dl><dt><strong>Request</strong></dt><dd>${safeRequestCode}</dd><dt><strong>Document</strong></dt><dd>${safeDocumentName}</dd><dt><strong>Amount</strong></dt><dd>${safeAmount}</dd><dt><strong>Payment method</strong></dt><dd>${safeMethod}</dd></dl>${referenceHtml}<p><strong>Confirmed:</strong> ${safePaidAt}</p><p>Your submitted payment receipt is attached when available.</p>`,
+        text: `Hello ${fullName},\n\nThe Registrar has confirmed receipt of your payment.\n\nRequest: ${requestCode}\nDocument: ${documentName}\nAmount: ${new Intl.NumberFormat("en", { style: "currency", currency }).format(amount)}\nPayment method: ${method}${referenceText}\nConfirmed: ${new Date(paidAt).toLocaleString()}\n\nYour submitted payment receipt is attached when available.`,
+        html: `<p>Hello ${safeName},</p><p>The Registrar has confirmed receipt of your payment.</p><dl><dt><strong>Request</strong></dt><dd>${safeRequestCode}</dd><dt><strong>Document</strong></dt><dd>${safeDocumentName}</dd><dt><strong>Amount</strong></dt><dd>${safeAmount}</dd><dt><strong>Payment method</strong></dt><dd>${safeMethod}</dd></dl>${referenceHtml}<p><strong>Confirmed:</strong> ${safePaidAt}</p><p>Your submitted payment receipt is attached when available.</p>`,
         attachments,
     });
 }

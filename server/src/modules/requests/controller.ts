@@ -75,7 +75,25 @@ export async function createDocumentRequest(
     }
     const requesterId = req.user.id;
 
-        const client = await pool.connect();
+    const clearance = await pool.query(
+        `SELECT status
+         FROM clearance_submissions
+         WHERE user_id = $1
+         ORDER BY submitted_at DESC, id DESC
+         LIMIT 1`,
+        [requesterId],
+    );
+    if (clearance.rows[0]?.status !== "verified") {
+        return res.status(403).json({
+            error: "Verified student clearance is required before submitting a document request.",
+        });
+    }
+    const requestDetails = {
+        ...additionalDetails,
+        paymentMethod: "Pay at the Office",
+    };
+
+    const client = await pool.connect();
         try {
             await client.query("BEGIN");
 
@@ -115,7 +133,7 @@ export async function createDocumentRequest(
                 [
                     requesterId,
                     purpose || null,
-                    JSON.stringify(additionalDetails),
+                    JSON.stringify(requestDetails),
                     quantity,
                     documentTypeId,
                 ],
@@ -161,7 +179,7 @@ export async function listDocumentRequests(
         }
 
         const canListAll = req.user.roles.some((role) =>
-            ["registrar", "saso", "finance", "administrator"].includes(role),
+            ["registrar"].includes(role),
         );
         const result = await pool.query(
             `SELECT
@@ -169,6 +187,7 @@ export async function listDocumentRequests(
                 req.display_code AS "displayCode",
                 req.requester_id AS "requesterId",
                 usr.full_name AS "requesterName",
+                usr.student_id AS "requesterStudentId",
                 req.status,
                 req.purpose,
                 req.additional_details AS "additionalDetails",
@@ -193,7 +212,7 @@ export async function listDocumentRequests(
              FROM requests AS req
              INNER JOIN document_types AS doc ON doc.id = req.document_type_id
              INNER JOIN users AS usr ON usr.id = req.requester_id
-             ${canListAll ? "" : "WHERE req.requester_id = $1"}
+             ${canListAll ? "WHERE req.status <> 'fulfilled'" : "WHERE req.requester_id = $1"}
              ORDER BY req.submitted_at DESC`,
             [req.user.id, canListAll],
         );

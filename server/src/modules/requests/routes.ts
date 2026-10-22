@@ -16,7 +16,7 @@ router.post("/", requireAuth, createDocumentRequest);
 router.patch(
   "/:id/status",
   requireAuth,
-  requireRole("registrar", "administrator"),
+  requireRole("registrar"),
   updateDocumentRequestStatus,
 );
 router.get("/", requireAuth, listDocumentRequests);

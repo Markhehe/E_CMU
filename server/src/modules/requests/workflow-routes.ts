@@ -39,11 +39,11 @@ const requestCommentSchema = z.object({
 });
 const commentIdSchema = z.coerce.number().int().positive().safe();
 
-const staffRoles = ["registrar", "saso", "finance", "administrator"];
+const staffRoles = ["registrar"];
 
 const paymentSchema = z
   .object({
-    method: z.enum(["cash", "gcash"]),
+    method: z.literal("cash"),
     amount: z.coerce.number().finite().nonnegative(),
     currency: z
       .string()
@@ -53,30 +53,57 @@ const paymentSchema = z
     status: z.enum(["pending", "succeeded", "failed"]),
     providerReference: z.string().trim().max(255).optional(),
     notes: z.string().trim().max(2000).optional(),
-  })
-  .superRefine((value, context) => {
-    if (value.method === "gcash" && !value.providerReference) {
-      context.addIssue({
-        code: "custom",
-        path: ["providerReference"],
-        message: "A GCash reference number is required",
-      });
-    }
   });
 
 const paymentProofSchema = z.object({
   receiptDataUrl: z
     .string()
-    .max(7_000_000)
+    .max(3_600_000)
     .regex(
       /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
       "Upload a PNG, JPEG, or WebP receipt image",
     ),
+  requestCopyDataUrl: z
+    .string()
+    .max(3_600_000)
+    .regex(
+      /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
+      "Upload a PNG, JPEG, or WebP copy of the printed request",
+    ),
+  trackingCode: z.string().trim().regex(/^[A-Fa-f0-9]{6}$/),
   paymentReference: z.string().trim().max(255).optional(),
 });
 
 const paymentMethodSchema = z.object({
-  paymentMethod: z.enum(["Online", "Pay at the Office"]),
+  paymentMethod: z.literal("Pay at the Office"),
+});
+const clearanceUploadSchema = z.object({
+  fileData: z.string().max(7_000_000).regex(
+    /^data:(?:application\/pdf|image\/(?:png|jpeg|webp));base64,[A-Za-z0-9+/]+={0,2}$/,
+    "Upload a PDF, PNG, JPEG, or WebP clearance file",
+  ),
+  originalName: z.string().trim().min(1).max(255),
+});
+const clearanceReviewSchema = z.object({
+  decision: z.enum(["verified", "needs_update"]),
+  comment: z.string().trim().max(2000).optional(),
+}).superRefine((value, context) => {
+  if (value.decision === "needs_update" && !value.comment?.trim()) {
+    context.addIssue({
+      code: "custom",
+      path: ["comment"],
+      message: "Explain what the student needs to correct",
+    });
+  }
+});
+const clearanceInvalidationSchema = z.object({
+  comment: z.string().trim().min(1).max(2000),
+});
+const walkInRequestSchema = z.object({
+  studentId: z.string().trim().min(1).max(64),
+  documentTypeId: z.coerce.number().int().positive().safe(),
+  purpose: z.string().trim().min(1).max(2000),
+  quantity: z.coerce.number().int().min(1).max(10).default(1),
 });
 
 type WorkflowRequest = Request;
@@ -116,17 +143,7 @@ const registrarStatusByDecision = {
   needs_information: "needs_information",
 } as const;
 
-const sasoStatusByDecision = {
-  approved: "saso_cleared",
-  rejected: "saso_rejected",
-  needs_information: "needs_information",
-} as const;
-
-const registrarReviewStatuses = [
-  "submitted",
-  "registrar_review",
-  "needs_information",
-] as const;
+const registrarReviewStatuses = ["submitted", "registrar_review", "needs_information"] as const;
 
 const registrarInterventionStatuses = [
   ...registrarReviewStatuses,
@@ -165,7 +182,7 @@ async function insertStatusChange(
 
 async function createReview(
   requestId: string,
-  stage: "registrar" | "saso",
+  stage: "registrar",
   decision: "approved" | "rejected" | "needs_information",
   comment: string | undefined,
   reviewerId: number,
@@ -183,11 +200,7 @@ async function createReview(
     }
 
     const allowedStatuses: readonly string[] =
-      stage === "registrar"
-        ? decision === "approved"
-          ? registrarReviewStatuses
-          : registrarInterventionStatuses
-        : ["registrar_approved", "saso_review"];
+      decision === "approved" ? registrarReviewStatuses : registrarInterventionStatuses;
 
     if (!allowedStatuses.includes(request.status)) {
       return {
@@ -196,17 +209,8 @@ async function createReview(
       };
     }
 
-    const nextStatus =
-      stage === "registrar"
-        ? registrarStatusByDecision[decision]
-        : sasoStatusByDecision[decision];
-
     const finalStatus =
-      stage === "registrar" && decision === "approved"
-        ? "saso_review"
-        : stage === "saso" && decision === "approved"
-          ? "awaiting_payment"
-          : nextStatus;
+      decision === "approved" ? "awaiting_payment" : registrarStatusByDecision[decision];
 
     const [review] = await tx
       .insert(requestReviews)
@@ -239,7 +243,7 @@ async function createReview(
 router.post(
   "/:id/registrar-review",
   requireAuth,
-  requireRole("registrar", "administrator"),
+  requireRole("registrar"),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     try {
       const { id } = requestIdSchema.parse(req.params);
@@ -435,9 +439,51 @@ router.post(
 );
 
 router.post(
+  "/:id/start-processing",
+  requireAuth,
+  requireRole("registrar"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const client = await pool.connect();
+    try {
+      const { id } = requestIdSchema.parse(req.params);
+      await client.query("BEGIN");
+      const current = await client.query(
+        "SELECT status FROM requests WHERE id = $1 FOR UPDATE",
+        [id],
+      );
+      if (current.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Request not found" });
+      }
+      if (current.rows[0].status !== "paid") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "Only paid requests can enter processing." });
+      }
+      await client.query(
+        `UPDATE requests SET status = 'processing', updated_at = NOW() WHERE id = $1`,
+        [id],
+      );
+      await client.query(
+        `INSERT INTO request_status_history
+           (request_id, from_status, to_status, changed_by, comment)
+         VALUES ($1, 'paid', 'processing', $2, 'Document processing started')`,
+        [id, req.user!.id],
+      );
+      await client.query("COMMIT");
+      return res.json({ status: "processing" });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return next(error);
+    } finally {
+      client.release();
+    }
+  },
+);
+
+router.post(
   "/:id/ready-for-pickup",
   requireAuth,
-  requireRole("registrar", "administrator"),
+  requireRole("registrar"),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const client = await pool.connect();
     let requestForEmail:
@@ -463,14 +509,14 @@ router.post(
       }
 
       const request = current.rows[0];
-      if (!["paid", "ready_for_retrieval", "ready"].includes(request.status)) {
+      if (!["paid", "processing", "ready_for_retrieval", "ready"].includes(request.status)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
-          error: "A request must have SASO clearance and confirmed payment before it can be marked ready for pickup.",
+          error: "A request must have verified clearance and confirmed payment before it can be marked ready for pickup.",
         });
       }
 
-      if (request.status === "paid") {
+      if (["paid", "processing"].includes(request.status)) {
         await client.query(
           `UPDATE requests
            SET status = 'ready_for_retrieval', updated_at = NOW()
@@ -480,8 +526,8 @@ router.post(
         await client.query(
           `INSERT INTO request_status_history
              (request_id, from_status, to_status, changed_by, comment)
-           VALUES ($1, 'paid', 'ready_for_retrieval', $2, 'Ready for pickup')`,
-          [id, req.user!.id],
+              VALUES ($1, $2, 'ready_for_retrieval', $3, 'Ready for pickup')`,
+             [id, request.status, req.user!.id],
         );
       }
       await client.query("COMMIT");
@@ -512,7 +558,7 @@ router.post(
 router.post(
   "/:id/pickup",
   requireAuth,
-  requireRole("registrar", "administrator"),
+  requireRole("registrar"),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const client = await pool.connect();
     try {
@@ -558,29 +604,452 @@ router.post(
   },
 );
 
-router.post(
-  "/:id/saso-clearance",
+router.get(
+  "/clearance/me",
   requireAuth,
-  requireRole("saso"),
+  requireRole("student"),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     try {
-      const { id } = requestIdSchema.parse(req.params);
-      const input = reviewSchema.parse(req.body);
-      const result = await createReview(
-        id,
-        "saso",
-        input.decision,
-        input.comment,
-        req.user!.id,
+      const result = await pool.query(
+        `SELECT id, file_data, original_name, status, comment, submitted_at, reviewed_at
+         FROM clearance_submissions
+         WHERE user_id = $1
+         ORDER BY submitted_at DESC, id DESC
+         LIMIT 1`,
+        [req.user!.id],
       );
+      return res.json({ clearance: result.rows[0] ?? null });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
 
-      if ("error" in result) {
-        return res.status(result.statusCode ?? 500).json({ error: result.error });
+router.post(
+  "/clearance",
+  requireAuth,
+  requireRole("student"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const parsed = clearanceUploadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message || "Invalid clearance upload",
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const latest = await client.query(
+        `SELECT status
+         FROM clearance_submissions
+         WHERE user_id = $1
+         ORDER BY submitted_at DESC, id DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [req.user!.id],
+      );
+      if (["submitted", "verified"].includes(latest.rows[0]?.status)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: latest.rows[0].status === "verified"
+            ? "Your clearance is already verified."
+            : "Your clearance is awaiting Registrar verification.",
+        });
       }
 
-      return res.status(201).json({ clearance: result.result });
+      const result = await client.query(
+        `INSERT INTO clearance_submissions (user_id, file_data, original_name)
+         VALUES ($1, $2, $3)
+         RETURNING id, file_data, original_name, status, comment, submitted_at, reviewed_at`,
+        [req.user!.id, parsed.data.fileData, parsed.data.originalName],
+      );
+      await client.query("COMMIT");
+      return res.status(201).json({ clearance: result.rows[0] });
     } catch (error) {
-      next(error);
+      await client.query("ROLLBACK");
+      return next(error);
+    } finally {
+      client.release();
+    }
+  },
+);
+
+router.delete(
+  "/clearance/:id",
+  requireAuth,
+  requireRole("student"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const id = z.coerce.number().int().positive().safe().safeParse(req.params.id);
+    if (!id.success) {
+      return res.status(400).json({ error: "Invalid clearance submission ID" });
+    }
+
+    try {
+      const deleted = await pool.query(
+        `DELETE FROM clearance_submissions
+         WHERE id = $1 AND user_id = $2 AND status = 'submitted'
+         RETURNING id`,
+        [id.data, req.user!.id],
+      );
+      if (deleted.rowCount > 0) {
+        return res.json({ success: true });
+      }
+
+      const existing = await pool.query(
+        `SELECT status
+         FROM clearance_submissions
+         WHERE id = $1 AND user_id = $2`,
+        [id.data, req.user!.id],
+      );
+      if (existing.rowCount === 0) {
+        return res.status(404).json({ error: "Clearance submission not found" });
+      }
+      return res.status(409).json({
+        error: "Only a clearance awaiting verification can be deleted.",
+      });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.get(
+  "/clearances",
+  requireAuth,
+  requireRole("registrar"),
+  async (_req: WorkflowRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await pool.query(
+        `SELECT latest.id, latest.file_data, latest.original_name, latest.status,
+                latest.comment, latest.submitted_at, latest.reviewed_at,
+                account.full_name, account.email, account.student_id
+         FROM (
+           SELECT DISTINCT ON (user_id) *
+           FROM clearance_submissions
+           ORDER BY user_id, submitted_at DESC, id DESC
+         ) AS latest
+         INNER JOIN users AS account ON account.id = latest.user_id
+         WHERE latest.status = 'submitted'
+         ORDER BY latest.submitted_at ASC`,
+      );
+      return res.json({ clearances: result.rows });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.get(
+  "/clearances/archive",
+  requireAuth,
+  requireRole("registrar"),
+  async (_req: WorkflowRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await pool.query(
+        `SELECT clearance.id, clearance.file_data, clearance.original_name,
+                clearance.status, clearance.comment, clearance.submitted_at,
+                clearance.reviewed_at, clearance.user_id,
+                account.full_name, account.email, account.student_id,
+                NOT EXISTS (
+                  SELECT 1
+                  FROM clearance_submissions AS newer
+                  WHERE newer.user_id = clearance.user_id
+                    AND (newer.submitted_at, newer.id) >
+                        (clearance.submitted_at, clearance.id)
+                ) AS is_current
+         FROM clearance_submissions AS clearance
+         INNER JOIN users AS account ON account.id = clearance.user_id
+         WHERE clearance.status = 'verified'
+         ORDER BY clearance.reviewed_at DESC NULLS LAST,
+                  clearance.submitted_at DESC`,
+      );
+      return res.json({ clearances: result.rows });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.get(
+  "/students/search",
+  requireAuth,
+  requireRole("registrar"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const query = z.string().trim().min(2).max(100).safeParse(req.query.q);
+    if (!query.success) {
+      return res.status(400).json({ error: "Enter at least 2 characters to search." });
+    }
+
+    try {
+      const result = await pool.query(
+        `SELECT account.id, account.full_name, account.email, account.active,
+                account.email_verified,
+                account.student_id, account.contact_phone, account.contact_address,
+                directory.first_name, directory.middle_name, directory.last_name,
+                directory.birthdate, account.created_at
+         FROM users AS account
+         INNER JOIN user_roles AS assignment ON assignment.user_id = account.id
+         INNER JOIN roles AS account_role
+           ON account_role.id = assignment.role_id AND account_role.name = 'student'
+         LEFT JOIN student_directory AS directory
+           ON directory.student_id = account.student_id
+         WHERE account.active = TRUE
+           AND account.student_id IS NOT NULL
+           AND (
+             account.full_name ILIKE $1
+             OR account.student_id ILIKE $1
+           )
+         ORDER BY account.full_name ASC
+         LIMIT 25`,
+        [`%${query.data}%`],
+      );
+      return res.json({ students: result.rows });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.get(
+  "/students/:studentId",
+  requireAuth,
+  requireRole("registrar"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const studentId = z.string().trim().min(1).max(64).safeParse(req.params.studentId);
+    if (!studentId.success) {
+      return res.status(400).json({ error: "Invalid student ID." });
+    }
+
+    try {
+      const studentResult = await pool.query(
+        `SELECT account.id, account.full_name, account.email, account.active,
+                account.email_verified,
+                account.student_id, account.contact_phone, account.contact_address,
+                account.created_at, directory.first_name, directory.middle_name,
+                directory.last_name, directory.birthdate
+         FROM users AS account
+         INNER JOIN user_roles AS assignment ON assignment.user_id = account.id
+         INNER JOIN roles AS account_role
+           ON account_role.id = assignment.role_id AND account_role.name = 'student'
+         LEFT JOIN student_directory AS directory
+           ON directory.student_id = account.student_id
+         WHERE account.student_id = $1
+         LIMIT 1`,
+        [studentId.data],
+      );
+      if (studentResult.rowCount === 0) {
+        return res.status(404).json({ error: "Student not found." });
+      }
+
+      const student = studentResult.rows[0];
+      const [clearanceResult, requestResult] = await Promise.all([
+        pool.query(
+          `SELECT clearance.id, clearance.file_data, clearance.original_name,
+                  clearance.status, clearance.comment, clearance.submitted_at,
+                  clearance.reviewed_at, reviewer.full_name AS reviewer_name,
+                  NOT EXISTS (
+                    SELECT 1
+                    FROM clearance_submissions AS newer
+                    WHERE newer.user_id = clearance.user_id
+                      AND (newer.submitted_at, newer.id) >
+                          (clearance.submitted_at, clearance.id)
+                  ) AS is_current
+           FROM clearance_submissions AS clearance
+           LEFT JOIN users AS reviewer ON reviewer.id = clearance.reviewed_by
+           WHERE clearance.user_id = $1
+           ORDER BY clearance.submitted_at DESC, clearance.id DESC`,
+          [student.id],
+        ),
+        pool.query(
+          `SELECT request.id, request.display_code, request.status,
+                  request.purpose, request.fee_amount, request.fee_currency,
+                  request.submitted_at, request.updated_at, request.completed_at,
+                  document.name AS document_name
+           FROM requests AS request
+           INNER JOIN document_types AS document
+             ON document.id = request.document_type_id
+           WHERE request.requester_id = $1
+           ORDER BY request.submitted_at DESC`,
+          [student.id],
+        ),
+      ]);
+
+      return res.json({
+        student,
+        clearances: clearanceResult.rows,
+        requests: requestResult.rows,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.post(
+  "/clearances/:id/invalidate",
+  requireAuth,
+  requireRole("registrar"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const id = z.coerce.number().int().positive().safe().safeParse(req.params.id);
+    const parsed = clearanceInvalidationSchema.safeParse(req.body);
+    if (!id.success || !parsed.success) {
+      return res.status(400).json({
+        error: parsed.success
+          ? "Invalid clearance submission ID"
+          : parsed.error.issues[0]?.message || "Invalid clearance invalidation",
+      });
+    }
+
+    try {
+      const result = await pool.query(
+        `UPDATE clearance_submissions
+         SET status = 'needs_update', comment = $1, reviewed_by = $2, reviewed_at = NOW()
+         WHERE id = $3
+           AND status = 'verified'
+           AND NOT EXISTS (
+             SELECT 1
+             FROM clearance_submissions AS newer
+             WHERE newer.user_id = clearance_submissions.user_id
+               AND (newer.submitted_at, newer.id) >
+                   (clearance_submissions.submitted_at, clearance_submissions.id)
+           )
+         RETURNING id, status, comment, reviewed_at`,
+        [parsed.data.comment, req.user!.id, id.data],
+      );
+      if (result.rowCount === 0) {
+        return res.status(409).json({
+          error: "Only a verified clearance can be invalidated.",
+        });
+      }
+      return res.json({ clearance: result.rows[0] });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.post(
+  "/clearances/:id/review",
+  requireAuth,
+  requireRole("registrar"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const id = z.coerce.number().int().positive().safe().safeParse(req.params.id);
+    const parsed = clearanceReviewSchema.safeParse(req.body);
+    if (!id.success || !parsed.success) {
+      return res.status(400).json({ error: "Invalid clearance review" });
+    }
+
+    try {
+      const result = await pool.query(
+        `UPDATE clearance_submissions
+         SET status = $1, comment = $2, reviewed_by = $3, reviewed_at = NOW()
+         WHERE id = $4 AND status = 'submitted'
+         RETURNING id, status, comment, reviewed_at`,
+        [
+          parsed.data.decision,
+          parsed.data.comment || null,
+          req.user!.id,
+          id.data,
+        ],
+      );
+      if (result.rowCount === 0) {
+        return res.status(409).json({
+          error: "This clearance was already reviewed or is no longer available.",
+        });
+      }
+      return res.json({ clearance: result.rows[0] });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.post(
+  "/walk-in",
+  requireAuth,
+  requireRole("registrar"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const parsed = walkInRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message || "Invalid walk-in request",
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const student = await client.query(
+        `SELECT account.id
+         FROM users AS account
+         INNER JOIN user_roles AS assignment ON assignment.user_id = account.id
+         INNER JOIN roles AS account_role
+           ON account_role.id = assignment.role_id AND account_role.name = 'student'
+         WHERE account.student_id = $1 AND account.active = TRUE
+         LIMIT 1`,
+        [parsed.data.studentId],
+      );
+      if (student.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Student ID was not found." });
+      }
+
+      const clearance = await client.query(
+        `SELECT status
+         FROM clearance_submissions
+         WHERE user_id = $1
+         ORDER BY submitted_at DESC, id DESC
+         LIMIT 1`,
+        [student.rows[0].id],
+      );
+      if (clearance.rows[0]?.status !== "verified") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "The student must have verified clearance before a request can be entered.",
+        });
+      }
+
+      const inserted = await client.query(
+        `INSERT INTO requests
+           (requester_id, document_type_id, status, purpose, additional_details,
+            fee_amount, fee_currency)
+         SELECT $1, document.id, 'submitted', $2, $3::jsonb,
+                document.base_fee * $4, document.currency
+         FROM document_types AS document
+         WHERE document.id = $5 AND document.active = TRUE
+         RETURNING id, display_code, status, fee_amount, fee_currency`,
+        [
+          student.rows[0].id,
+          parsed.data.purpose,
+          JSON.stringify({
+            quantity: parsed.data.quantity,
+            collectionMethod: "Pick-up",
+            paymentMethod: "Pay at the Office",
+            requestSource: "walk_in",
+          }),
+          parsed.data.quantity,
+          parsed.data.documentTypeId,
+        ],
+      );
+      if (inserted.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "The selected document is unavailable." });
+      }
+      const request = inserted.rows[0];
+      await client.query(
+        `INSERT INTO request_status_history
+           (request_id, from_status, to_status, changed_by, comment)
+         VALUES ($1, NULL, 'submitted', $2, 'Walk-in request entered by Registrar')`,
+        [request.id, req.user!.id],
+      );
+      await client.query("COMMIT");
+      return res.status(201).json({ request });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return next(error);
+    } finally {
+      client.release();
     }
   },
 );
@@ -651,7 +1120,7 @@ router.post(
 
       await client.query("BEGIN");
       const result = await client.query(
-        `SELECT id, status, additional_details
+        `SELECT id, display_code, status, additional_details
          FROM requests
          WHERE id = $1 AND requester_id = $2
          FOR UPDATE`,
@@ -678,11 +1147,16 @@ router.post(
           request.additional_details?.payment_method ??
           "",
       );
-      if (!/online|gcash/i.test(paymentMethod)) {
+      if (/online|gcash/i.test(paymentMethod)) {
         await client.query("ROLLBACK");
         res.status(400).json({
-          error: "Payment proof is only available for online payment requests",
+          error: "Online payments are no longer accepted. Pay cash at the Finance Office.",
         });
+        return;
+      }
+      if (input.trackingCode.toUpperCase() !== request.display_code) {
+        await client.query("ROLLBACK");
+        res.status(400).json({ error: "Tracking code does not match this request." });
         return;
       }
 
@@ -698,6 +1172,7 @@ router.post(
           nextStatus,
           JSON.stringify({
             receiptUrl: input.receiptDataUrl,
+            requestCopyUrl: input.requestCopyDataUrl,
             paymentReference: input.paymentReference || null,
             paymentSentAt: uploadedAt,
           }),
@@ -710,13 +1185,14 @@ router.post(
           `INSERT INTO request_status_history
              (request_id, from_status, to_status, changed_by, comment)
            VALUES ($1, $2, $3, $4, $5)`,
-          [id, request.status, nextStatus, req.user!.id, "Requester submitted online payment proof"],
+          [id, request.status, nextStatus, req.user!.id, "Student submitted cash payment receipt and request copy"],
         );
       }
 
       await client.query("COMMIT");
       res.status(201).json({
         receiptUrl: input.receiptDataUrl,
+        requestCopyUrl: input.requestCopyDataUrl,
         paymentReference: input.paymentReference || null,
         paymentSentAt: uploadedAt,
         status: nextStatus,
@@ -733,7 +1209,7 @@ router.post(
 router.post(
   "/:id/payments",
   requireAuth,
-  requireRole("finance"),
+  requireRole("registrar"),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const client = await pool.connect();
     try {
@@ -775,10 +1251,10 @@ router.post(
           "",
       );
       const isOnlinePayment = /online|gcash/i.test(requestedPaymentMethod);
-      if (isOnlinePayment && input.method !== "gcash") {
+      if (input.method !== "cash" || isOnlinePayment) {
         await client.query("ROLLBACK");
         res.status(400).json({
-          error: "Online payment requests must be confirmed as GCash payments",
+          error: "Only cash payments at the Finance Office are accepted.",
         });
         return;
       }
@@ -786,14 +1262,6 @@ router.post(
         request.additional_details?.receiptUrl ??
         request.additional_details?.receipt_url ??
         request.additional_details?.proof_of_payment;
-      if (isOnlinePayment && !receiptUrl) {
-        await client.query("ROLLBACK");
-        res.status(409).json({
-          error: "Requester payment proof must be submitted before confirming receipt",
-        });
-        return;
-      }
-
       if (
         request.fee_amount !== null &&
         Number(request.fee_amount) !== input.amount
@@ -887,7 +1355,7 @@ router.post(
           request.status,
           nextStatus,
           req.user!.id,
-          input.notes ?? `Finance payment status: ${input.status}`,
+          input.notes ?? `Registrar cash payment status: ${input.status}`,
         ],
       );
       await client.query("COMMIT");

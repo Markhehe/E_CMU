@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   decimal,
+  date,
   index,
   integer,
   jsonb,
@@ -82,6 +83,9 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
+  studentId: varchar("student_id", { length: 64 }),
+  contactPhone: varchar("contact_phone", { length: 40 }),
+  contactAddress: text("contact_address"),
   stakeholderType: stakeholderType("stakeholder_type").notNull(),
   active: boolean("active").notNull().default(true),
   emailVerified: boolean("email_verified").notNull().default(true),
@@ -91,6 +95,30 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+});
+
+export const studentDirectory = pgTable("student_directory", {
+  studentId: varchar("student_id", { length: 64 }).primaryKey(),
+  firstName: varchar("first_name", { length: 120 }).notNull(),
+  lastName: varchar("last_name", { length: 120 }).notNull(),
+  middleName: varchar("middle_name", { length: 120 }),
+  birthdate: date("birthdate", { mode: "string" }).notNull(),
+});
+
+export const clearanceSubmissions = pgTable("clearance_submissions", {
+  id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+  userId: bigint("user_id", { mode: "number" })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  fileData: text("file_data").notNull(),
+  originalName: varchar("original_name", { length: 255 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("submitted"),
+  comment: text("comment"),
+  submittedAt: timestamp("submitted_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  reviewedBy: bigint("reviewed_by", { mode: "number" }).references(() => users.id),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
 });
 
 export const roles = pgTable("roles", {

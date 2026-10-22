@@ -15,7 +15,7 @@ const requestCommentSchema = z.object({
   visibility: z.enum(["requester", "staff"]),
 });
 const commentIdSchema = z.coerce.number().int().positive().safe();
-const staffRoles = ["registrar", "saso", "finance", "administrator"];
+const staffRoles = ["registrar"];
 
 router.get("/document-types", requireAuth, async (_req, res, next) => {
   try {
@@ -31,7 +31,7 @@ router.get("/document-types", requireAuth, async (_req, res, next) => {
   }
 });
 
-router.post("/", requireAuth, async (req, res, next) => {
+router.post("/", requireAuth, requireRole("student"), async (req, res, next) => {
   try {
     const data = createRequestSchema.parse(req.body);
     const quantity = Number(data.additionalDetails.quantity || 1);
@@ -42,6 +42,25 @@ router.post("/", requireAuth, async (req, res, next) => {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      const clearanceResult = await client.query(
+        `SELECT status
+         FROM clearance_submissions
+         WHERE user_id = $1
+         ORDER BY submitted_at DESC, id DESC
+         LIMIT 1`,
+        [req.user.id],
+      );
+      if (clearanceResult.rows[0]?.status !== "verified") {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          error: "Verified student clearance is required before submitting a document request.",
+        });
+      }
+
+      const additionalDetails = {
+        ...data.additionalDetails,
+        paymentMethod: "Pay at the Office",
+      };
       const result = await client.query(
         `INSERT INTO requests
            (requester_id, document_type_id, purpose, additional_details, fee_amount, fee_currency)
@@ -49,7 +68,7 @@ router.post("/", requireAuth, async (req, res, next) => {
          FROM document_types
          WHERE id = $4 AND active = TRUE
          RETURNING *`,
-        [req.user.id, data.purpose ?? null, data.additionalDetails, data.documentTypeId, quantity],
+        [req.user.id, data.purpose ?? null, additionalDetails, data.documentTypeId, quantity],
       );
 
       if (result.rowCount === 0) {
@@ -172,17 +191,18 @@ router.post("/:id/comments", requireAuth, requireRole(...staffRoles), async (req
 router.get("/", requireAuth, async (req, res, next) => {
   try {
     const isStaff = req.user.roles.some((role) =>
-      ["registrar", "saso", "finance", "administrator"].includes(role),
+      ["registrar"].includes(role),
     );
     const values = isStaff ? [] : [req.user.id];
     const result = await pool.query(
       `SELECT req.*, doc.name AS document_type_name,
               usr.full_name AS requester_name,
-              usr.email AS requester_email
+              usr.email AS requester_email,
+              usr.student_id AS requester_student_id
        FROM requests req
        INNER JOIN document_types doc ON doc.id = req.document_type_id
        INNER JOIN users usr ON usr.id = req.requester_id
-       ${isStaff ? "" : "WHERE req.requester_id = $1"}
+       ${isStaff ? "WHERE req.status <> 'fulfilled'" : "WHERE req.requester_id = $1"}
        ORDER BY req.submitted_at DESC`,
       values,
     );

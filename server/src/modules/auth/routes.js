@@ -15,7 +15,6 @@ const credentials = z.object({
         { message: "Use your @cityofmalabonuniversity.edu.ph email address" }
     ),
     password: z.string().min(8),
-    stakeholderType: z.enum(["student", "professor", "other"]),
 });
 
 router.post("/register", async (req, res, next) => {
@@ -30,24 +29,45 @@ router.post("/register", async (req, res, next) => {
     try {
         const data = parsed.data;
         const normalizedEmail = data.email.toLowerCase();
-        const fullName = normalizedEmail.split("@")[0];
+        const studentId = normalizedEmail.split("@")[0];
         const passwordHash = await bcrypt.hash(data.password, 12);
         const code = String(randomInt(100000, 1000000));
         const codeHash = createHash("sha256").update(code).digest("hex");
         client = await pool.connect();
         await client.query("BEGIN");
 
+        const directoryResult = await client.query(
+            `SELECT student_id, first_name, middle_name, last_name
+             FROM student_directory
+             WHERE lower(student_id) = $1`,
+            [studentId],
+        );
+        if (directoryResult.rowCount === 0) {
+            await client.query("ROLLBACK");
+            return res.status(422).json({
+                error: "Your university email does not match a student record. Contact the Registrar to verify your student ID.",
+            });
+        }
+
+        const student = directoryResult.rows[0];
+        const fullName = [
+            student.first_name,
+            student.middle_name,
+            student.last_name,
+        ].filter(Boolean).join(" ");
+
         const result = await client.query(
-            `INSERT INTO users (email, password_hash, full_name, stakeholder_type, email_verified)
-            VALUES ($1, $2, $3, $4, FALSE)
+            `INSERT INTO users
+                (email, password_hash, full_name, stakeholder_type, student_id, email_verified)
+            VALUES ($1, $2, $3, 'student', $4, FALSE)
             ON CONFLICT (email) DO UPDATE
             SET password_hash = EXCLUDED.password_hash,
                 full_name = EXCLUDED.full_name,
-                stakeholder_type = EXCLUDED.stakeholder_type,
+                student_id = EXCLUDED.student_id,
                 updated_at = NOW()
             WHERE users.email_verified = FALSE
             RETURNING id, email, full_name, stakeholder_type`,
-            [normalizedEmail, passwordHash, fullName, data.stakeholderType]
+            [normalizedEmail, passwordHash, fullName, student.student_id]
         );
 
         if (result.rowCount === 0) {
@@ -56,9 +76,9 @@ router.post("/register", async (req, res, next) => {
         }
 
         const user = result.rows[0];
-        const role = await client.query("SELECT id FROM roles WHERE name = 'requester'");
+        const role = await client.query("SELECT id FROM roles WHERE name = 'student'");
         if (role.rowCount === 0) {
-            throw new Error("Requester role is not configured");
+            throw new Error("Student role is not configured");
         }
         await client.query(
             `INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)
@@ -244,12 +264,15 @@ router.post("/login", async (req, res, next) => {
 
         const result = await pool.query(
             `SELECT u.*,
+                directory.birthdate,
                 COALESCE(array_agg(r.name) FILTER (WHERE r.name IS NOT NULL), '{}') AS roles
              FROM users u
+             LEFT JOIN student_directory AS directory
+               ON directory.student_id = u.student_id
              LEFT JOIN user_roles ur ON ur.user_id = u.id
              LEFT JOIN roles r ON r.id = ur.role_id
              WHERE u.email = $1 AND u.active = TRUE
-             GROUP BY u.id`,
+             GROUP BY u.id, directory.birthdate`,
             [data.email.toLowerCase()]
         );
 
@@ -270,6 +293,10 @@ router.post("/login", async (req, res, next) => {
                 id: user.id,
                 email: user.email,
                 fullName: user.full_name,
+                studentId: user.student_id,
+                birthdate: user.birthdate,
+                contactPhone: user.contact_phone,
+                contactAddress: user.contact_address,
                 stakeholderType: user.stakeholder_type,
                 roles: user.roles,
             },
@@ -286,21 +313,34 @@ router.post("/logout", (_req, res) => {
 
 router.patch("/profile", requireAuth, async (req, res, next) => {
     const parsed = z.object({
-        name: z.string().trim().min(1).max(255),
+        contactPhone: z.string().trim().max(40).nullable().optional(),
+        contactAddress: z.string().trim().max(500).nullable().optional(),
     }).safeParse(req.body);
     if (!parsed.success) {
         return res.status(400).json({
-            error: parsed.error.issues[0]?.message || "Enter a valid name",
+            error: parsed.error.issues[0]?.message || "Enter valid contact details",
         });
+    }
+    if (parsed.data.contactPhone === undefined && parsed.data.contactAddress === undefined) {
+        return res.status(400).json({ error: "Provide at least one contact detail to update" });
     }
 
     try {
         const result = await pool.query(
             `UPDATE users
-             SET full_name = $1, updated_at = NOW()
-             WHERE id = $2 AND active = TRUE
-             RETURNING id, email, full_name, stakeholder_type`,
-            [parsed.data.name, req.user.id],
+             SET contact_phone = CASE WHEN $1::boolean THEN $2 ELSE contact_phone END,
+                 contact_address = CASE WHEN $3::boolean THEN $4 ELSE contact_address END,
+                 updated_at = NOW()
+             WHERE id = $5 AND active = TRUE
+             RETURNING id, email, full_name, stakeholder_type, student_id,
+                       contact_phone, contact_address`,
+            [
+                parsed.data.contactPhone !== undefined,
+                parsed.data.contactPhone ?? null,
+                parsed.data.contactAddress !== undefined,
+                parsed.data.contactAddress ?? null,
+                req.user.id,
+            ],
         );
         if (result.rowCount === 0) {
             return res.status(404).json({ error: "User account not found" });
@@ -312,6 +352,9 @@ router.patch("/profile", requireAuth, async (req, res, next) => {
                 id: user.id,
                 email: user.email,
                 fullName: user.full_name,
+                studentId: user.student_id,
+                contactPhone: user.contact_phone,
+                contactAddress: user.contact_address,
                 stakeholderType: user.stakeholder_type,
                 roles: req.user.roles,
             },
