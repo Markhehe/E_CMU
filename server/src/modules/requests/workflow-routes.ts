@@ -776,14 +776,23 @@ router.get(
   requireAuth,
   requireRole("registrar"),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
-    const query = z.string().trim().min(2).max(100).safeParse(req.query.q);
+    const query = z.string().trim().max(100).optional().safeParse(req.query.q);
     if (!query.success) {
+      return res.status(400).json({ error: "Search must be 100 characters or fewer." });
+    }
+    const searchTerm = query.data || null;
+    if (searchTerm !== null && searchTerm.length < 2) {
       return res.status(400).json({ error: "Enter at least 2 characters to search." });
     }
 
     try {
       const result = await pool.query(
-        `SELECT account.id, account.full_name, account.email, account.active,
+        `SELECT account.id,
+                COALESCE(
+                  NULLIF(CONCAT_WS(' ', directory.first_name, directory.middle_name, directory.last_name), ''),
+                  account.full_name
+                ) AS full_name,
+                account.email, account.active,
                 account.email_verified,
                 account.student_id, account.contact_phone, account.contact_address,
                 directory.first_name, directory.middle_name, directory.last_name,
@@ -795,14 +804,16 @@ router.get(
          LEFT JOIN student_directory AS directory
            ON directory.student_id = account.student_id
          WHERE account.active = TRUE
-           AND account.student_id IS NOT NULL
            AND (
-             account.full_name ILIKE $1
-             OR account.student_id ILIKE $1
+             $1::text IS NULL
+             OR account.full_name ILIKE $1
+             OR CONCAT_WS(' ', directory.first_name, directory.middle_name, directory.last_name) ILIKE $1
+             OR COALESCE(account.student_id, '') ILIKE $1
+             OR account.email ILIKE $1
            )
-         ORDER BY account.full_name ASC
+         ORDER BY full_name ASC, account.student_id ASC NULLS LAST, account.id ASC
          LIMIT 25`,
-        [`%${query.data}%`],
+        [searchTerm === null ? null : `%${searchTerm}%`],
       );
       return res.json({ students: result.rows });
     } catch (error) {
@@ -835,6 +846,7 @@ router.get(
          LEFT JOIN student_directory AS directory
            ON directory.student_id = account.student_id
          WHERE account.student_id = $1
+            OR lower(account.email) = lower($1)
          LIMIT 1`,
         [studentId.data],
       );
