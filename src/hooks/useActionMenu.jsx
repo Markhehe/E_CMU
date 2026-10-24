@@ -6,19 +6,19 @@ import { useState, useEffect, useCallback } from 'react';
  */
 export function useActionMenu() {
   const [openMenuId, setOpenMenuId] = useState(null);
-  
+
   // We change this to a generic style object instead of hardcoded top/right
   const [menuCoords, setMenuCoords] = useState({});
 
   useEffect(() => {
     const closeMenu = () => setOpenMenuId(null);
-    
+
     if (openMenuId !== null) {
       window.addEventListener('click', closeMenu);
-      window.addEventListener('scroll', closeMenu, true); 
+      window.addEventListener('scroll', closeMenu, true);
       window.addEventListener('resize', closeMenu); // NEW: Closes menu on screen resize/rotation
     }
-    
+
     return () => {
       window.removeEventListener('click', closeMenu);
       window.removeEventListener('scroll', closeMenu, true);
@@ -27,8 +27,8 @@ export function useActionMenu() {
   }, [openMenuId]);
 
   const toggleMenu = useCallback((e, id) => {
-    e.stopPropagation(); 
-    
+    e.stopPropagation();
+
     if (openMenuId === id) {
       setOpenMenuId(null);
       return;
@@ -36,7 +36,7 @@ export function useActionMenu() {
 
     const buttonRect = e.target.getBoundingClientRect();
     const spaceBelow = window.innerHeight - buttonRect.bottom;
-    
+
     const newCoords = {
       right: window.innerWidth - buttonRect.right,
     };
@@ -47,7 +47,7 @@ export function useActionMenu() {
     } else {
       newCoords.top = buttonRect.bottom + 4;
     }
-    
+
     setMenuCoords(newCoords);
     setOpenMenuId(id);
   }, [openMenuId]);

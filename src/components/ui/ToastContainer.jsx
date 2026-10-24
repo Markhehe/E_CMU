@@ -6,8 +6,8 @@ export default function ToastContainer({ toasts, removeToast }) {
       {toasts.map((toast) => (
         <div key={toast.id} className={`toast ${toast.type}`} role="alert">
           <span className="toast-message">{toast.message}</span>
-          <button 
-            className="toast-close" 
+          <button
+            className="toast-close"
             onClick={() => removeToast(toast.id)}
             aria-label="Close notification"
           >

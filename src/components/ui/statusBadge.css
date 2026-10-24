@@ -16,18 +16,30 @@
   white-space: nowrap; /* Prevents text from breaking onto two lines */
 }
 
-/* 
-   Modern CSS: Using color-mix() to automatically generate a 15% opacity 
-   background directly from your global design tokens. 
+/*
+   Modern CSS: Using color-mix() to automatically generate a 15% opacity
+   background directly from your global design tokens.
 */
 .status-pending {
   background-color: color-mix(in srgb, var(--honey-bronze) 15%, transparent);
   color: var(--honey-bronze); /* Using your CMU Gold */
 }
 
+.status-pending-review,
+.status-registrar-review,
+.status-clearance-review {
+  background-color: color-mix(in srgb, var(--honey-bronze) 15%, transparent);
+  color: var(--honey-bronze);
+}
+
 .status-processing {
   background-color: color-mix(in srgb, var(--status-processing) 15%, transparent);
   color: var(--status-processing);
+}
+
+.status-paid {
+  background-color: color-mix(in srgb, var(--status-success) 15%, transparent);
+  color: var(--status-success);
 }
 
 .status-success {

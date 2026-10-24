@@ -34,7 +34,7 @@ function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  
+
   // Modal Visibility States
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [showResendModal, setShowResendModal] = useState(false);
@@ -268,7 +268,7 @@ function VerificationCodeForm({
     try {
       const result = await AuthService.verifyEmail(email, verificationCode);
       addToast(result.message || 'Email verified successfully.', 'success');
-      onSuccess();
+      onSuccess(result);
     } catch (error) {
       addToast(error.message || 'Could not verify the code.', 'error');
     } finally {
@@ -331,7 +331,11 @@ function VerificationCodeForm({
  * Registration Modal Component
  */
 function RegistrationModal({ isOpen, onClose }) {
-  const [regData, setRegData] = useState({ name: '', email: '', password: '' });
+  const [regData, setRegData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState('');
@@ -340,6 +344,7 @@ function RegistrationModal({ isOpen, onClose }) {
   const [emailVerified, setEmailVerified] = useState(false);
 
   const { addToast } = useToast();
+  const { login } = useAuth();
 
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
@@ -347,11 +352,14 @@ function RegistrationModal({ isOpen, onClose }) {
       addToast('Use your @cityofmalabonuniversity.edu.ph email address.', 'error');
       return;
     }
+    if (regData.password !== regData.confirmPassword) {
+      addToast('Passwords do not match.', 'error');
+      return;
+    }
 
     setIsRegistering(true);
     try {
       const result = await AuthService.register({
-        fullName: regData.name,
         email: regData.email,
         password: regData.password,
       });
@@ -383,7 +391,7 @@ function RegistrationModal({ isOpen, onClose }) {
   };
 
   const handleModalClose = () => {
-    setRegData({ name: '', email: '', password: '' });
+    setRegData({ email: '', password: '', confirmPassword: '' });
     setConfirmationEmail('');
     setEmailVerified(false);
     setEmailDeliveryIssue(false);
@@ -404,28 +412,16 @@ function RegistrationModal({ isOpen, onClose }) {
           <VerificationCodeForm
             email={confirmationEmail}
             emailDeliveryIssue={emailDeliveryIssue}
-            onSuccess={() => setEmailVerified(true)}
+            onSuccess={(result) => {
+              login(result.user);
+              setEmailVerified(true);
+            }}
             onResend={handleResendConfirmation}
             isResending={isResending}
           />
         )
       ) : (
         <form onSubmit={handleRegisterSubmit} className="auth-form">
-          <div className="form-field-group">
-            <label htmlFor="regName" className="auth-label">Full Name</label>
-            <input
-              id="regName"
-              type="text"
-              className="auth-input"
-              placeholder="e.g., Juan Dela Cruz"
-              value={regData.name}
-              onChange={(e) => setRegData({ ...regData, name: e.target.value })}
-              autoComplete="name"
-              required
-              disabled={isRegistering}
-            />
-          </div>
-
           <div className="form-field-group">
             <label htmlFor="regEmail" className="auth-label">University Email</label>
             <input
@@ -440,7 +436,7 @@ function RegistrationModal({ isOpen, onClose }) {
               disabled={isRegistering}
             />
             <p className="auth-hint">
-              Registration is restricted to official @cityofmalabonuniversity.edu.ph email addresses.
+              Use your official student email. The part before @ must match the StudentId on file with the Registrar.
             </p>
           </div>
 
@@ -455,6 +451,7 @@ function RegistrationModal({ isOpen, onClose }) {
                 value={regData.password}
                 onChange={(e) => setRegData({ ...regData, password: e.target.value })}
                 autoComplete="new-password"
+                minLength={8}
                 required
                 disabled={isRegistering}
               />
@@ -467,6 +464,22 @@ function RegistrationModal({ isOpen, onClose }) {
                 {showRegPassword ? <EyeOffIcon /> : <EyeIcon />}
               </button>
             </div>
+          </div>
+
+          <div className="form-field-group">
+            <label htmlFor="regConfirmPassword" className="auth-label">Re-enter password</label>
+            <input
+              id="regConfirmPassword"
+              type={showRegPassword ? 'text' : 'password'}
+              className="auth-input"
+              placeholder="Re-enter your password"
+              value={regData.confirmPassword}
+              onChange={(e) => setRegData({ ...regData, confirmPassword: e.target.value })}
+              autoComplete="new-password"
+              minLength={8}
+              required
+              disabled={isRegistering}
+            />
           </div>
 
           <button type="submit" className="auth-button" disabled={isRegistering}>
@@ -487,6 +500,7 @@ function ResendConfirmationModal({ isOpen, onClose }) {
   const [isSending, setIsSending] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
   const { addToast } = useToast();
+  const { login } = useAuth();
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -521,7 +535,10 @@ function ResendConfirmationModal({ isOpen, onClose }) {
       ) : verificationEmail ? (
         <VerificationCodeForm
           email={verificationEmail}
-          onSuccess={() => setEmailVerified(true)}
+          onSuccess={(result) => {
+            login(result.user);
+            setEmailVerified(true);
+          }}
         />
       ) : (
         <form onSubmit={handleSubmit} className="auth-form">

@@ -76,7 +76,7 @@ html, body, #root {
 
 .sidebar-divider {
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.15); 
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
   margin: 0 var(--space-lg) var(--space-md);
   flex-shrink: 0;
 }
@@ -145,20 +145,20 @@ html, body, #root {
   background-color: var(--surface-white);
   border-radius: 20px 0 0 20px;
   overflow: hidden;
-  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1); 
+  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.1);
   min-width: 0;
 }
 
 .page-header {
   display: flex;
   align-items: center;
-  justify-content: space-between; 
+  justify-content: space-between;
   height: 55px; /* Fixed header height */
   padding: 0 var(--space-xl);
   background-color: var(--surface-white);
   border-bottom: 1px solid var(--border-light);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-  position: relative; 
+  position: relative;
   z-index: 10;
   flex-shrink: 0;
 }
@@ -293,7 +293,7 @@ html, body, #root {
   z-index: 1000;
   display: flex;
   flex-direction: column;
-} 
+}
 
 .header-dropdown-menu button {
   width: 100%;
@@ -326,48 +326,4 @@ html, body, #root {
    ========================================= */
 .sidebar-backdrop {
   display: none;
-}
-
-@media (max-width: 900px) {
-  .app-main {
-    border-radius: 0;
-  }
-
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    transform: translateX(-100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 50;
-  }
-
-  .sidebar.sidebar-open {
-    transform: translateX(0);
-  }
-
-  .sidebar:not(.sidebar-open) {
-    margin-left: 0;
-  }
-
-  .sidebar-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(2px);
-    z-index: 40;
-  }
-
-  .user-info {
-    display: none;
-  }
-  
-  .page-header-org {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-  }
 }

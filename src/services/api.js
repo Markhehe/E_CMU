@@ -5,6 +5,16 @@
  */
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
+const MAX_RECEIPT_SIZE = 5 * 1024 * 1024;
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Unable to read the receipt image.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 /**
  * Universal fetch wrapper with automatic headers and error normalization
@@ -52,7 +62,10 @@ async function apiRequest(path, options = {}) {
     return await response.text();
   } catch (err) {
     if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-      throw new Error('Unable to connect to the server. Please check your network connection.');
+      throw new Error(
+        'Unable to connect to the server. Please check your network connection.',
+        { cause: err }
+      );
     }
     throw err;
   }
@@ -60,44 +73,25 @@ async function apiRequest(path, options = {}) {
 
 // System Workflow Status Mappings (Backend Status -> Human Readable UI Badge Label)
 export const STATUS_LABELS = {
-  submitted: 'PENDING PAYMENT',
+  submitted: 'PENDING REVIEW',
+  registrar_review: 'REGISTRAR REVIEW',
   needs_information: 'ON HOLD',
-  approved: 'PROCESSING',
-  registrar_review: 'PROCESSING',
-  registrar_approved: 'PROCESSING',
+  approved: 'PENDING PAYMENT',
+  registrar_approved: 'CLEARANCE REVIEW',
   registrar_rejected: 'REJECTED',
-  saso_review: 'PROCESSING',
-  saso_cleared: 'PROCESSING',
+  saso_review: 'CLEARANCE REVIEW',
+  saso_cleared: 'PENDING PAYMENT',
   saso_rejected: 'REJECTED',
   awaiting_payment: 'PENDING PAYMENT',
   payment_review: 'PENDING PAYMENT',
-  paid: 'PROCESSING',
+  paid: 'PAID',
   processing: 'PROCESSING',
   ready: 'READY FOR PICKUP',
   ready_for_retrieval: 'READY FOR PICKUP',
-  fulfilled: 'COMPLETED',
+  fulfilled: 'FULFILLED',
   rejected: 'REJECTED',
   cancelled: 'REJECTED',
 };
-
-// UI Badge Label -> Backend Status Normalizer
-const UI_TO_BACKEND_STATUS = {
-  'PENDING PAYMENT': 'submitted',
-  'PROCESSING': 'processing',
-  'READY FOR PICKUP': 'ready',
-  'COMPLETED': 'fulfilled',
-  'REJECTED': 'rejected',
-  'ON HOLD': 'needs_information',
-};
-
-/**
- * Normalizes UI badge strings or raw strings to backend-compatible status codes
- */
-export function toBackendStatus(status) {
-  if (!status) return 'processing';
-  const upperKey = String(status).trim().toUpperCase();
-  return UI_TO_BACKEND_STATUS[upperKey] || String(status).toLowerCase();
-}
 
 /**
  * Generates clean 6-character fallback Display ID
@@ -149,18 +143,22 @@ const receiptUrl =
 
   const hasReceipt = Boolean(
     receiptUrl ||
-    paymentReference ||
     additionalDetails.hasReceipt ||
     additionalDetails.has_receipt ||
     request.hasReceipt ||
-    request.has_receipt ||
-    paymentMethod === 'Online'
+    request.has_receipt
   );
 
   return {
     id: String(request.id),
     displayId: formatDisplayId(request.id, request.displayCode || request.display_code),
-    studentId: String(request.requesterId ?? request.requester_id ?? 'N/A'),
+    requesterId: String(request.requesterId ?? request.requester_id ?? 'N/A'),
+    studentId: String(
+      request.requesterStudentId ||
+      request.requester_student_id ||
+      request.studentId ||
+      'N/A'
+    ),
     studentName: request.requesterName || request.requester_name || 'Unknown Student',
     studentEmail: request.requesterEmail || request.requester_email || '',
     docType: request.documentTypeName || request.document_type_name || 'Document',
@@ -172,13 +170,20 @@ const receiptUrl =
     status: STATUS_LABELS[rawStatus] || rawStatus.toUpperCase(),
     paymentMethod,
     paymentReference,
+    requestCopyUrl: additionalDetails.requestCopyUrl || additionalDetails.request_copy_url || null,
     hasReceipt,
     receiptUrl,
+    paymentSentAt: additionalDetails.paymentSentAt || additionalDetails.payment_sent_at || null,
+    paymentConfirmationEmail:
+      additionalDetails.paymentConfirmationEmail ||
+      additionalDetails.payment_confirmation_email ||
+      null,
     purpose: request.purpose || '',
     feeAmount: Number(request.feeAmount ?? request.fee_amount ?? 0),
     feeCurrency: request.feeCurrency || request.fee_currency || 'PHP',
     collectionMethod: additionalDetails.collectionMethod || 'Pickup',
     rejectionReason: request.rejectionReason || request.rejection_reason || null,
+    hasUnreadComments: Boolean(request.hasUnreadComments ?? request.has_unread_comments),
   };
 }
 
@@ -190,15 +195,10 @@ export const AuthService = {
     });
   },
 
-  async register({ fullName, email, password }) {
+  async register({ email, password }) {
     return apiRequest('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({
-        fullName,
-        email,
-        password,
-        stakeholderType: 'student',
-      }),
+      body: JSON.stringify({ email, password }),
     });
   },
 
@@ -218,6 +218,13 @@ export const AuthService = {
 
   async me() {
     return apiRequest('/auth/me');
+  },
+
+  async updateProfile({ contactPhone, contactAddress }) {
+    return apiRequest('/auth/profile', {
+      method: 'PATCH',
+      body: JSON.stringify({ contactPhone, contactAddress }),
+    });
   },
 
   async logout() {
@@ -272,43 +279,189 @@ export const DocumentService = {
     };
   },
 
-  // Role Action: SASO Clearance Workflow
-  async updateSasoClearance(requestId, isCleared, notes = '') {
-    return apiRequest(`/requests/${encodeURIComponent(requestId)}/saso-clearance`, {
+  async createWalkInRequest(requestData) {
+    return apiRequest('/requests/walk-in', {
+      method: 'POST',
+      body: JSON.stringify(requestData),
+    });
+  },
+
+  // Registrar clearance verification
+  async updateClearance(requestId, isCleared, notes = '') {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/clearance`, {
       method: 'POST',
       body: JSON.stringify({
-        decision: isCleared ? 'approved' : 'rejected',
+        decision: isCleared ? 'approved' : 'needs_information',
+        comment: notes,
+      }),
+    });
+  },
+
+  async submitRegistrarReview(requestId, decision, comment = '') {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/registrar-review`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, comment }),
+    });
+  },
+
+  async confirmRequestPayment(requestId, { method, amount, currency, providerReference, notes }) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/payments`, {
+      method: 'POST',
+      body: JSON.stringify({
+        method,
+        amount,
+        currency,
+        status: 'succeeded',
+        providerReference,
         notes,
       }),
     });
   },
 
-  // Role Action: Generic Request Status Transition (Admin / Registrar / Finance)
-  async updateRequestStatus(requestId, status, reason = '') {
-    const backendStatus = toBackendStatus(status);
-    return apiRequest(`/requests/${encodeURIComponent(requestId)}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: backendStatus, reason }),
+  async markRequestReadyForPickup(requestId) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/ready-for-pickup`, {
+      method: 'POST',
+    });
+  },
+
+  async startRequestProcessing(requestId) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/start-processing`, {
+      method: 'POST',
+    });
+  },
+
+  async markRequestPickedUp(requestId) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/pickup`, {
+      method: 'POST',
+    });
+  },
+
+  async getRequestComments(requestId) {
+    const result = await apiRequest(`/requests/${encodeURIComponent(requestId)}/comments`);
+    return result.comments || [];
+  },
+
+  async addRequestComment(requestId, { comment, visibility }) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ comment, visibility }),
+    });
+  },
+
+  async deleteRequestComment(requestId, commentId) {
+    return apiRequest(
+      `/requests/${encodeURIComponent(requestId)}/comments/${encodeURIComponent(commentId)}`,
+      { method: 'DELETE' }
+    );
+  },
+
+  async markRequestCommentsRead(requestId) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/comments/read`, {
+      method: 'POST',
+    });
+  },
+
+  async updateRequestPaymentMethod(requestId, paymentMethod) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/payment-method`, {
+      method: 'POST',
+      body: JSON.stringify({ paymentMethod }),
     });
   },
 
   // Workflow Action: Payment Receipt & Reference Submission
-  async submitPaymentDetails(requestId, { paymentMethod, paymentReference, receiptFile }) {
-    if (receiptFile) {
-      const formData = new FormData();
-      formData.append('receipt', receiptFile);
-      formData.append('paymentMethod', paymentMethod);
-      if (paymentReference) formData.append('paymentReference', paymentReference);
-
-      return apiRequest(`/requests/${encodeURIComponent(requestId)}/payment`, {
-        method: 'POST',
-        body: formData,
-      });
+  async submitPaymentDetails(
+    requestId,
+    { paymentReference, receiptFile, requestCopyFile, trackingCode },
+  ) {
+    if (!receiptFile) {
+      throw new Error('Choose a receipt image before submitting.');
     }
-
-    return apiRequest(`/requests/${encodeURIComponent(requestId)}/payment`, {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(receiptFile.type)) {
+      throw new Error('Receipt must be a PNG, JPEG, or WebP image.');
+    }
+    if (!requestCopyFile) {
+      throw new Error('Choose a picture of the printed request with its tracking code.');
+    }
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(requestCopyFile.type)) {
+      throw new Error('Request copy must be a PNG, JPEG, or WebP image.');
+    }
+    const maxProofFileSize = 2.5 * 1024 * 1024;
+    if (receiptFile.size > maxProofFileSize || requestCopyFile.size > maxProofFileSize) {
+      throw new Error('Each uploaded image must be 2.5 MB or smaller.');
+    }
+    const receiptDataUrl = await readFileAsDataUrl(receiptFile);
+    const requestCopyDataUrl = await readFileAsDataUrl(requestCopyFile);
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/payment-proof`, {
       method: 'POST',
-      body: JSON.stringify({ paymentMethod, paymentReference }),
+      body: JSON.stringify({
+        paymentMethod: 'Pay at the Office',
+        paymentReference,
+        receiptDataUrl,
+        requestCopyDataUrl,
+        trackingCode,
+      }),
+    });
+  },
+};
+
+export const ClearanceService = {
+  async getMine() {
+    const result = await apiRequest('/requests/clearance/me');
+    return result.clearance;
+  },
+
+  async submit(file) {
+    if (!file) throw new Error('Choose your clearance file before submitting.');
+    if (!['application/pdf', 'image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      throw new Error('Clearance file must be a PDF, PNG, JPEG, or WebP.');
+    }
+    if (file.size > MAX_RECEIPT_SIZE) {
+      throw new Error('Clearance file must be 5 MB or smaller.');
+    }
+    const fileData = await readFileAsDataUrl(file);
+    return apiRequest('/requests/clearance', {
+      method: 'POST',
+      body: JSON.stringify({ fileData, originalName: file.name }),
+    });
+  },
+
+  async deletePending(id) {
+    return apiRequest(`/requests/clearance/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getPending() {
+    const result = await apiRequest('/requests/clearances');
+    return result.clearances || [];
+  },
+
+  async getArchive(query = '') {
+    const search = query ? `?q=${encodeURIComponent(query)}` : '';
+    const result = await apiRequest(`/requests/clearances/archive${search}`);
+    return result.clearances || [];
+  },
+
+  async searchStudents(query) {
+    const result = await apiRequest(`/requests/students/search?q=${encodeURIComponent(query)}`);
+    return result.students || [];
+  },
+
+  async getStudentProfile(studentId) {
+    return apiRequest(`/requests/students/${encodeURIComponent(studentId)}`);
+  },
+
+  async review(id, decision, comment = '') {
+    return apiRequest(`/requests/clearances/${encodeURIComponent(id)}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, comment }),
+    });
+  },
+
+  async invalidate(id, comment) {
+    return apiRequest(`/requests/clearances/${encodeURIComponent(id)}/invalidate`, {
+      method: 'POST',
+      body: JSON.stringify({ comment }),
     });
   },
 };

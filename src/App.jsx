@@ -6,7 +6,9 @@
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useAuth } from './contexts/AuthContext';
+import { scrollbarOptions } from './utils/scrollbarOptions';
 
 // Layout Shell Components
 import Sidebar from './components/layout/Sidebar';
@@ -17,10 +19,11 @@ import Login from './pages/auth/Login';
 import Guide from './pages/Guide';
 import Dashboard from './pages/student/Dashboard';
 import CreateRequest from './pages/student/CreateRequest';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import FinanceDashboard from './pages/finance/FinanceDashboard';
-import SasoDashboard from './pages/saso/SasoDashboard';
+import RegistrarDashboard from './pages/registrar/RegistrarDashboard';
+import RegistrarClearanceDashboard from './pages/registrar/RegistrarClearanceDashboard';
+import RegistrarStudents from './pages/registrar/RegistrarStudents';
 import Settings from './pages/Settings';
+import ActionCooldown from './components/ui/ActionCooldown';
 
 /**
  * Normalizes role strings and returns the primary home dashboard route.
@@ -30,12 +33,8 @@ const getDefaultRoute = (role) => {
   const userRole = role.toUpperCase();
 
   switch (userRole) {
-    case 'ADMIN':
-      return '/admin/dashboard';
-    case 'FINANCE':
-      return '/finance/dashboard';
-    case 'SASO':
-      return '/saso/dashboard';
+    case 'REGISTRAR':
+      return '/registrar/dashboard';
     case 'STUDENT':
     default:
       return '/dashboard';
@@ -92,7 +91,7 @@ function ProtectedRoute({ allowedRole, allowedRoles, children }) {
  * Encapsulates responsive sidebar drawer, top header bar, and nested page outlet.
  */
 function AppShell() {
-  const SIDEBAR_BREAKPOINT = 900;
+  const SIDEBAR_BREAKPOINT = 992;
   const [isSidebarOpen, setIsSidebarOpen] = useState(
     window.innerWidth > SIDEBAR_BREAKPOINT
   );
@@ -111,9 +110,17 @@ function AppShell() {
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <div className="app-main">
         <PageHeader onMenuClick={() => setIsSidebarOpen((prev) => !prev)} />
-        <main className="main-content">
+        <OverlayScrollbarsComponent
+          element="main"
+          className="main-content"
+          options={{
+            ...scrollbarOptions,
+            overflow: { x: 'hidden', y: 'scroll' },
+          }}
+          defer
+        >
           <Outlet />
-        </main>
+        </OverlayScrollbarsComponent>
       </div>
     </div>
   );
@@ -127,6 +134,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ActionCooldown />
       <Routes>
         {/* =========================================
             AUTHENTICATION ROUTE
@@ -186,40 +194,18 @@ function App() {
           <Route path="/student/create-request" element={<CreateRequest />} />
         </Route>
 
-        {/* REGISTRAR ADMIN ROUTES */}
+        {/* REGISTRAR ROUTES */}
         <Route
           element={
-            <ProtectedRoute allowedRole="ADMIN">
+            <ProtectedRoute allowedRole="REGISTRAR">
               <AppShell />
             </ProtectedRoute>
           }
         >
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-        </Route>
-
-        {/* FINANCE ROUTES */}
-        <Route
-          element={
-            <ProtectedRoute allowedRole="FINANCE">
-              <AppShell />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/finance/dashboard" element={<FinanceDashboard />} />
-          <Route path="/finance" element={<Navigate to="/finance/dashboard" replace />} />
-        </Route>
-
-        {/* SASO CLEARANCE ROUTES */}
-        <Route
-          element={
-            <ProtectedRoute allowedRole="SASO">
-              <AppShell />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/saso/dashboard" element={<SasoDashboard />} />
-          <Route path="/saso" element={<Navigate to="/saso/dashboard" replace />} />
+          <Route path="/registrar/dashboard" element={<RegistrarDashboard />} />
+          <Route path="/registrar/clearance" element={<RegistrarClearanceDashboard />} />
+          <Route path="/registrar/students" element={<RegistrarStudents />} />
+          <Route path="/registrar" element={<Navigate to="/registrar/dashboard" replace />} />
         </Route>
 
         {/* =========================================

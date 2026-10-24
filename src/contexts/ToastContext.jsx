@@ -8,6 +8,7 @@ import { createContext, useContext, useState, useCallback } from 'react';
 import ToastContainer from '../components/ui/ToastContainer';
 
 const ToastContext = createContext(null);
+const MAX_VISIBLE_TOASTS = 3;
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
@@ -19,7 +20,7 @@ export function ToastProvider({ children }) {
   const addToast = useCallback((message, type = 'success', duration = 3000) => {
     const id = `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => [...prev, { id, message, type }].slice(-MAX_VISIBLE_TOASTS));
 
     // Auto-dismiss timeout
     if (duration > 0) {

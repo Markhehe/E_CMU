@@ -1,11 +1,12 @@
 /**
  * Component: Sidebar
- * Main navigation drawer featuring role-based routing (Student, Admin, Finance, SASO),
+ * Main navigation drawer featuring role-based routing (Student and Registrar),
  * active link indicators, dual-color branding header, and responsive mobile overlay handlers.
  */
 
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useStudentClearance } from '../../hooks/useStudentClearance';
 import cmuLogo from '../../assets/cmulogo.png';
 import '../../styles/layout.css';
 
@@ -42,13 +43,6 @@ const ShieldCheckIcon = () => (
   </svg>
 );
 
-const CreditCardIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-    <line x1="1" y1="10" x2="23" y2="10"></line>
-  </svg>
-);
-
 const SettingsIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3"></circle>
@@ -58,22 +52,12 @@ const SettingsIcon = () => (
 
 // Declarative Role-Based Navigation Configuration
 const NAV_CONFIG = {
-  ADMIN: {
-    homePath: '/admin/dashboard',
+  REGISTRAR: {
+    homePath: '/registrar/dashboard',
     links: [
-      { to: '/admin/dashboard', label: 'Registrar Panel', icon: ShieldCheckIcon },
-    ],
-  },
-  FINANCE: {
-    homePath: '/finance/dashboard',
-    links: [
-      { to: '/finance/dashboard', label: 'Finance Panel', icon: CreditCardIcon },
-    ],
-  },
-  SASO: {
-    homePath: '/saso/dashboard',
-    links: [
-      { to: '/saso/dashboard', label: 'Clearance Panel', icon: ShieldCheckIcon },
+      { to: '/registrar/dashboard', label: 'Registrar Panel', icon: ShieldCheckIcon },
+      { to: '/registrar/clearance', label: 'Clearance Verification', icon: ShieldCheckIcon },
+      { to: '/registrar/students', label: 'Student Records', icon: DashboardIcon },
     ],
   },
   STUDENT: {
@@ -89,11 +73,19 @@ const NAV_CONFIG = {
 function Sidebar({ isOpen, onClose }) {
   const { currentUser } = useAuth();
   const role = currentUser?.role?.toUpperCase() || 'STUDENT';
+  const { isVerified } = useStudentClearance({ enabled: role === 'STUDENT' });
 
   const currentNav = NAV_CONFIG[role] || NAV_CONFIG.STUDENT;
+  const navLinks = role === 'STUDENT'
+    ? currentNav.links.map((item) => (
+      item.to === '/student/create-request'
+        ? { ...item, label: isVerified ? 'Request a Document' : 'Upload Clearance' }
+        : item
+    ))
+    : currentNav.links;
 
   const handleLinkClick = () => {
-    if (window.innerWidth <= 900 && onClose) {
+    if (window.innerWidth <= 992 && onClose) {
       onClose();
     }
   };
@@ -135,14 +127,19 @@ function Sidebar({ isOpen, onClose }) {
         {/* Dynamic Navigation Menu */}
         <nav className="sidebar-nav">
           <div className="sidebar-menu-links">
-            {currentNav.links.map((item) => {
+            {navLinks.map((item) => {
               const IconComponent = item.icon;
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   className={getLinkClass}
-                  onClick={handleLinkClick}
+                  onClick={() => {
+                    handleLinkClick();
+                    if (item.to === '/registrar/students') {
+                      window.dispatchEvent(new Event('student-records:show-list'));
+                    }
+                  }}
                 >
                   <IconComponent />
                   <span>{item.label}</span>

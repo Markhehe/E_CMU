@@ -4,10 +4,8 @@
  * payment details, clearance status, and request purpose.
  */
 
-import React from 'react';
 import Modal from './Modal';
 import StatusBadge from './StatusBadge';
-import ClearanceBadge from './ClearanceBadge';
 import { formatDate } from '../../utils/formatters';
 
 function formatCurrency(amount, currency = 'PHP') {
@@ -25,7 +23,7 @@ const RequestDetailsModal = ({ isOpen, onClose, request }) => {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Request Details" maxWidth="520px">
       <div className="request-details-container" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-        
+
         {/* Detail Items List */}
         <div className="detail-row" style={rowStyle}>
           <span style={labelStyle}>Request ID</span>
@@ -80,16 +78,51 @@ const RequestDetailsModal = ({ isOpen, onClose, request }) => {
           <span style={valueStyle}>{request.paymentMethod || 'Not recorded'}</span>
         </div>
 
+        {request.hasReceipt && (
+          <div className="detail-row" style={rowStyle}>
+            <span style={labelStyle}>Payment Sent</span>
+            <span style={valueStyle}>
+              Receipt submitted
+              {request.paymentSentAt ? ` on ${formatDate(request.paymentSentAt)}` : ''}
+            </span>
+          </div>
+        )}
+
+        {request.paymentConfirmationEmail && (
+          <section
+            aria-label="Payment confirmation email"
+            style={{
+              padding: '0.85rem 1rem',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '8px',
+              border: '1px solid var(--border-light)',
+            }}
+          >
+            <strong style={{ color: 'var(--imperial-blue)' }}>
+              Payment confirmation email queued
+            </strong>
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.84rem', color: '#495057' }}>
+              Email queued for {request.paymentConfirmationEmail.to}: payment received for{' '}
+              {request.paymentConfirmationEmail.requestCode} -{' '}
+              {request.paymentConfirmationEmail.documentName},{' '}
+              {formatCurrency(
+                request.paymentConfirmationEmail.amount,
+                request.paymentConfirmationEmail.currency,
+              )}{' '}
+              via {request.paymentConfirmationEmail.method}.
+              {request.paymentConfirmationEmail.reference && (
+                <> Reference: {request.paymentConfirmationEmail.reference}.</>
+              )}
+            </p>
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              Delivery is handled by the configured SMTP server.
+            </p>
+          </section>
+        )}
+
         <div className="detail-row" style={rowStyle}>
           <span style={labelStyle}>Collection Method</span>
           <span style={valueStyle}>{request.collectionMethod || 'Pick-up'}</span>
-        </div>
-
-        <div className="detail-row" style={rowStyle}>
-          <span style={labelStyle}>SASO Clearance</span>
-          <span>
-            <ClearanceBadge isCleared={request.sasoCleared} />
-          </span>
         </div>
 
         <div className="detail-row" style={{ ...rowStyle, borderBottom: 'none' }}>
@@ -136,34 +169,6 @@ const RequestDetailsModal = ({ isOpen, onClose, request }) => {
           </p>
         </div>
 
-        {/* Rejection Reason Notice (If Rejected) */}
-        {request.rejectionReason && (
-          <div
-            className="rejection-box"
-            style={{
-              padding: '0.85rem 1rem',
-              backgroundColor: '#fff5f5',
-              borderRadius: '8px',
-              border: '1px solid #ffc9c9',
-            }}
-          >
-            <span
-              style={{
-                display: 'block',
-                fontSize: '0.78rem',
-                fontWeight: '700',
-                color: '#e03131',
-                textTransform: 'uppercase',
-                marginBottom: '0.35rem',
-              }}
-            >
-              Rejection Reason
-            </span>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#c92a2a', lineHeight: 1.4 }}>
-              {request.rejectionReason}
-            </p>
-          </div>
-        )}
       </div>
     </Modal>
   );

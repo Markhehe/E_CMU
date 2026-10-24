@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { AuthService } from '../services/api';
 import '../styles/dashboard.css';
 
 // SVG Icons for Settings Navigation
@@ -32,9 +33,12 @@ const BellIcon = () => (
 );
 
 function Settings() {
-  const { currentUser } = useAuth();
+  const { currentUser, updateUserProfile } = useAuth();
   const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState('profile');
+  const [contactPhone, setContactPhone] = useState(currentUser?.contactPhone || '');
+  const [contactAddress, setContactAddress] = useState(currentUser?.contactAddress || '');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Security Tab Form State
   const [currentPassword, setCurrentPassword] = useState('');
@@ -45,6 +49,26 @@ function Settings() {
   // Preferences Form State
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [smsNotifs, setSmsNotifs] = useState(false);
+
+  const handleProfileUpdate = async (event) => {
+    event.preventDefault();
+    setIsSavingProfile(true);
+    try {
+      const result = await AuthService.updateProfile({
+        contactPhone: contactPhone.trim(),
+        contactAddress: contactAddress.trim(),
+      });
+      updateUserProfile({
+        contactPhone: result.user.contactPhone,
+        contactAddress: result.user.contactAddress,
+      });
+      addToast('Contact information updated successfully.', 'success');
+    } catch (error) {
+      addToast(error.message || 'Failed to update contact information.', 'error');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   // Password Update Submit Handler
   const handlePasswordUpdate = async (e) => {
@@ -103,7 +127,7 @@ function Settings() {
 
       {/* 2. Main Settings Container */}
       <div className="settings-container">
-        
+
         {/* Settings Navigation Sidebar */}
         <div className="settings-sidebar" role="tablist">
           <button
@@ -139,48 +163,98 @@ function Settings() {
 
         {/* Settings Content Area */}
         <div className="settings-content">
-          
+
           {/* TAB 1: Profile Information */}
           {activeTab === 'profile' && (
             <div>
               <h2 className="settings-section-title">Profile Information</h2>
               <hr className="settings-divider" />
 
-              <div className="settings-profile-grid">
-                <div>
-                  <label className="settings-label">Full Name</label>
-                  <input
-                    type="text"
-                    value={currentUser?.name || currentUser?.fullName || 'University User'}
-                    className="form-input"
-                    disabled
-                  />
+              <form onSubmit={handleProfileUpdate} data-action-cooldown="protected">
+                <div className="settings-profile-grid">
+                  <div>
+                    <label className="settings-label" htmlFor="profileName">Name on student record</label>
+                    <input
+                      id="profileName"
+                      type="text"
+                      value={currentUser?.name || ''}
+                      className="form-input"
+                      disabled
+                    />
+                  </div>
+
+                  <div>
+                    <label className="settings-label" htmlFor="profileStudentId">Student ID</label>
+                    <input
+                      id="profileStudentId"
+                      type="text"
+                      value={currentUser?.studentId || ''}
+                      className="form-input role-input"
+                      disabled
+                    />
+                  </div>
+
+                  <div>
+                    <label className="settings-label" htmlFor="profileBirthdate">Birthdate</label>
+                    <input
+                      id="profileBirthdate"
+                      type="text"
+                      value={currentUser?.birthdate ? new Date(currentUser.birthdate).toLocaleDateString() : ''}
+                      className="form-input"
+                      disabled
+                    />
+                  </div>
+
+                  <div>
+                    <label className="settings-label" htmlFor="profileEmail">Email Address</label>
+                    <input
+                      id="profileEmail"
+                      type="email"
+                      value={currentUser?.email || 'user@cityofmalabonuniversity.edu.ph'}
+                      className="form-input"
+                      disabled
+                    />
+                  </div>
+
+                  <div>
+                    <label className="settings-label" htmlFor="contactPhone">Contact Number</label>
+                    <input
+                      id="contactPhone"
+                      type="tel"
+                      value={contactPhone}
+                      onChange={(event) => setContactPhone(event.target.value)}
+                      className="form-input"
+                      maxLength={40}
+                      autoComplete="tel"
+                      disabled={isSavingProfile}
+                    />
+                  </div>
+
+                  <div className="full-width-col">
+                    <label className="settings-label" htmlFor="contactAddress">Contact Address</label>
+                    <textarea
+                      id="contactAddress"
+                      value={contactAddress}
+                      onChange={(event) => setContactAddress(event.target.value)}
+                      className="form-input"
+                      maxLength={500}
+                      autoComplete="street-address"
+                      rows={3}
+                      disabled={isSavingProfile}
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="settings-label">Role</label>
-                  <input
-                    type="text"
-                    value={currentUser?.role || 'Student'}
-                    className="form-input role-input"
-                    disabled
-                  />
+                <div className="modal-actions" style={{ marginTop: '1rem' }}>
+                  <button type="submit" className="btn-primary" disabled={isSavingProfile}>
+                    {isSavingProfile ? 'Saving...' : 'Save Contact Information'}
+                  </button>
                 </div>
-
-                <div className="full-width-col">
-                  <label className="settings-label">Email Address</label>
-                  <input
-                    type="email"
-                    value={currentUser?.email || 'user@cityofmalabonuniversity.edu.ph'}
-                    className="form-input"
-                    disabled
-                  />
-                </div>
-              </div>
+              </form>
 
               <div className="settings-callout-box">
                 <p className="settings-note">
-                  <strong>* Note:</strong> Profile information is synchronized with the official university registrar database. To request corrections to your name or student ID, please contact the Management Information Systems (MIS) office.
+                  <strong>* Note:</strong> Your name, student ID, and birthdate come from the Registrar’s student directory. Update your contact number and address here.
                 </p>
               </div>
             </div>
@@ -192,7 +266,11 @@ function Settings() {
               <h2 className="settings-section-title">Security & Password</h2>
               <hr className="settings-divider" />
 
-              <form onSubmit={handlePasswordUpdate} className="settings-security-form">
+              <form
+                onSubmit={handlePasswordUpdate}
+                className="settings-security-form"
+                data-action-cooldown="protected"
+              >
                 <div className="form-field-group">
                   <label className="settings-label" htmlFor="currentPassword">Current Password</label>
                   <input
