@@ -484,6 +484,10 @@ export const notifications = pgTable(
     requestId: uuid("request_id").references(() => requests.id, {
       onDelete: "cascade",
     }),
+    commentId: bigint("comment_id", { mode: "number" }).references(
+      () => requestComments.id,
+      { onDelete: "cascade" },
+    ),
     channel: notificationChannel("channel").notNull().default("in_app"),
     type: varchar("type", { length: 100 }).notNull(),
     title: varchar("title", { length: 255 }).notNull(),

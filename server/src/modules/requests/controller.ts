@@ -90,6 +90,7 @@ export async function createDocumentRequest(
     }
     const requestDetails = {
         ...additionalDetails,
+        collectionMethod: "Pick-up",
         paymentMethod: "Pay at the Office",
     };
 
@@ -196,6 +197,12 @@ export async function listDocumentRequests(
                 req.submitted_at AS "submittedAt",
                 req.updated_at AS "updatedAt",
                 doc.name AS "documentTypeName",
+                (
+                    SELECT COUNT(*)::int
+                    FROM request_comments AS comment_row
+                    WHERE comment_row.request_id = req.id
+                      AND ($2::boolean OR comment_row.visibility = 'requester')
+                ) AS "commentCount",
                 EXISTS (
                     SELECT 1
                     FROM request_comments AS comment_row

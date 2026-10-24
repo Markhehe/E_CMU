@@ -11,6 +11,7 @@ import {
   requestReviews,
   requestStatusHistory,
   requests,
+  notifications,
   roles,
   userRoles,
 } from "../../db/schema.js";
@@ -24,17 +25,172 @@ import {
 
 const router = Router();
 
+router.get(
+  "/notifications",
+  requireAuth,
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    try {
+      if (req.user!.roles.some((role) => role.toLowerCase() === "registrar")) {
+        const [requests, clearances, paymentProofs] = await Promise.all([
+          pool.query(
+            `SELECT request_row.id, request_row.display_code, request_row.submitted_at,
+                    requester.full_name AS requester_name,
+                    document.name AS document_name
+             FROM requests AS request_row
+             INNER JOIN users AS requester ON requester.id = request_row.requester_id
+             INNER JOIN document_types AS document ON document.id = request_row.document_type_id
+             WHERE request_row.status IN ('submitted', 'registrar_review', 'needs_information')
+             ORDER BY request_row.submitted_at DESC`,
+          ),
+          pool.query(
+            `SELECT latest.id, latest.submitted_at, account.full_name AS requester_name
+             FROM (
+               SELECT DISTINCT ON (user_id) id, user_id, submitted_at, status
+               FROM clearance_submissions
+               ORDER BY user_id, submitted_at DESC, id DESC
+             ) AS latest
+             INNER JOIN users AS account ON account.id = latest.user_id
+             WHERE latest.status = 'submitted'
+             ORDER BY latest.submitted_at DESC`,
+          ),
+          pool.query(
+            `SELECT request_row.id, request_row.display_code, request_row.updated_at,
+                    requester.full_name AS requester_name
+             FROM requests AS request_row
+             INNER JOIN users AS requester ON requester.id = request_row.requester_id
+             WHERE request_row.status = 'payment_review'
+             ORDER BY request_row.updated_at DESC`,
+          ),
+        ]);
+
+        const inboxNotifications = [
+          ...requests.rows.map((request) => ({
+            id: `registrar-request-${request.id}`,
+            type: "registrar_request_submitted",
+            title: "New document request",
+            message: `New request from ${request.requester_name} for ${request.document_name} (${request.display_code}).`,
+            request_id: request.id,
+            read_at: null,
+            created_at: request.submitted_at,
+          })),
+          ...clearances.rows.map((clearance) => ({
+            id: `registrar-clearance-${clearance.id}`,
+            type: "registrar_clearance_submitted",
+            title: "New clearance verification request",
+            message: `Clearance submitted by ${clearance.requester_name} for verification.`,
+            request_id: null,
+            read_at: null,
+            created_at: clearance.submitted_at,
+          })),
+          ...paymentProofs.rows.map((paymentProof) => ({
+            id: `registrar-payment-${paymentProof.id}`,
+            type: "registrar_payment_proof_submitted",
+            title: "New payment proof submitted",
+            message: `Payment proof submitted by ${paymentProof.requester_name} for request ${paymentProof.display_code}.`,
+            request_id: paymentProof.id,
+            read_at: null,
+            created_at: paymentProof.updated_at,
+          })),
+        ].sort((left, right) => (
+          new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
+        ));
+
+        return res.json({
+          notifications: inboxNotifications,
+          unreadCount: inboxNotifications.length,
+        });
+      }
+
+      const result = await pool.query(
+        `SELECT notification.id, notification.type, notification.title,
+                notification.message, notification.request_id, notification.comment_id,
+                notification.read_at,
+                notification.created_at, request_row.display_code
+         FROM notifications AS notification
+         LEFT JOIN requests AS request_row ON request_row.id = notification.request_id
+         WHERE notification.user_id = $1
+           AND notification.channel = 'in_app'
+         ORDER BY notification.created_at DESC, notification.id DESC
+         LIMIT 50`,
+        [req.user!.id],
+      );
+      const unread = await pool.query(
+        `SELECT COUNT(*)::int AS count
+         FROM notifications
+         WHERE user_id = $1
+           AND channel = 'in_app'
+           AND read_at IS NULL`,
+        [req.user!.id],
+      );
+      return res.json({
+        notifications: result.rows,
+        unreadCount: unread.rows[0].count,
+      });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.post(
+  "/notifications/read-all",
+  requireAuth,
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    try {
+      await pool.query(
+        `UPDATE notifications
+         SET read_at = NOW()
+         WHERE user_id = $1
+           AND channel = 'in_app'
+           AND read_at IS NULL`,
+        [req.user!.id],
+      );
+      return res.json({ success: true });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
+router.post(
+  "/notifications/:id/read",
+  requireAuth,
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const id = z.coerce.number().int().positive().safe().safeParse(req.params.id);
+    if (!id.success) {
+      return res.status(400).json({ error: "Invalid notification ID" });
+    }
+    try {
+      const result = await pool.query(
+        `UPDATE notifications
+         SET read_at = COALESCE(read_at, NOW())
+         WHERE id = $1
+           AND user_id = $2
+           AND channel = 'in_app'
+         RETURNING id`,
+        [id.data, req.user!.id],
+      );
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      return res.json({ success: true });
+    } catch (error) {
+      return next(error);
+    }
+  },
+);
+
 const requestIdSchema = z.object({
   id: z.string().uuid(),
 });
 
 const reviewSchema = z.object({
   decision: z.enum(["approved", "rejected", "needs_information"]),
-  comment: z.string().trim().max(2000).optional(),
+  comment: z.string().trim().max(240).optional(),
 });
 
 const requestCommentSchema = z.object({
-  comment: z.string().trim().min(1).max(2000),
+  comment: z.string().trim().min(1).max(240),
   visibility: z.enum(["requester", "staff"]),
 });
 const commentIdSchema = z.coerce.number().int().positive().safe();
@@ -86,7 +242,7 @@ const clearanceUploadSchema = z.object({
 });
 const clearanceReviewSchema = z.object({
   decision: z.enum(["verified", "needs_update"]),
-  comment: z.string().trim().max(2000).optional(),
+  comment: z.string().trim().max(240).optional(),
 }).superRefine((value, context) => {
   if (value.decision === "needs_update" && !value.comment?.trim()) {
     context.addIssue({
@@ -97,7 +253,7 @@ const clearanceReviewSchema = z.object({
   }
 });
 const clearanceInvalidationSchema = z.object({
-  comment: z.string().trim().min(1).max(2000),
+  comment: z.string().trim().min(1).max(240),
 });
 const walkInRequestSchema = z.object({
   studentId: z.string().trim().min(1).max(64),
@@ -189,7 +345,12 @@ async function createReview(
 ) {
   return db.transaction(async (tx) => {
     const [request] = await tx
-      .select({ id: requests.id, status: requests.status })
+      .select({
+        id: requests.id,
+        status: requests.status,
+        requesterId: requests.requesterId,
+        displayCode: requests.displayCode,
+      })
       .from(requests)
       .where(eq(requests.id, requestId))
       .for("update")
@@ -235,6 +396,26 @@ async function createReview(
       changedBy: reviewerId,
       comment: comment ?? `${stage} decision: ${decision}`,
     });
+
+    if (decision === "approved") {
+      await tx.insert(notifications).values({
+        userId: request.requesterId,
+        requestId,
+        type: "request_approved",
+        title: "Request approved — payment due",
+        message: `Your request ${request.displayCode} was approved and is waiting for payment.`,
+      });
+    } else if (decision === "rejected") {
+      await tx.insert(notifications).values({
+        userId: request.requesterId,
+        requestId,
+        type: "request_declined",
+        title: "Request declined",
+        message: comment?.trim()
+          ? `Your request ${request.displayCode} was declined by the Registrar. Registrar comment: ${comment.trim()}`
+          : `Your request ${request.displayCode} was declined by the Registrar.`,
+      });
+    }
 
     return { result: review };
   });
@@ -344,11 +525,28 @@ router.post(
 
     try {
       const result = await pool.query(
-        `INSERT INTO request_comments (request_id, author_id, visibility, comment)
-         SELECT request_row.id, $2, $3, $4
-         FROM requests AS request_row
-         WHERE request_row.id = $1
-         RETURNING id, comment, visibility, created_at`,
+        `WITH inserted_comment AS (
+           INSERT INTO request_comments (request_id, author_id, visibility, comment)
+           SELECT request_row.id, $2, $3, $4
+           FROM requests AS request_row
+           WHERE request_row.id = $1
+           RETURNING id, request_id, author_id, visibility, comment, created_at
+         ),
+         inserted_notification AS (
+           INSERT INTO notifications
+             (user_id, request_id, comment_id, channel, type, title, message)
+           SELECT request_row.requester_id, request_row.id, inserted_comment.id, 'in_app',
+                  'request_comment', 'New comment on your request',
+                  'A registrar sent you a comment on request ' || request_row.display_code || '.'
+           FROM requests AS request_row
+           INNER JOIN inserted_comment ON inserted_comment.request_id = request_row.id
+           WHERE inserted_comment.visibility = 'requester'
+           RETURNING id
+         )
+         SELECT inserted_comment.id, inserted_comment.comment, inserted_comment.visibility,
+                inserted_comment.created_at, author.full_name AS author_name
+         FROM inserted_comment
+         INNER JOIN users AS author ON author.id = inserted_comment.author_id`,
         [
           parsedId.data.id,
           req.user!.id,
@@ -385,7 +583,7 @@ router.post(
       }
 
       return res.status(201).json({
-        comment: { ...result.rows[0], author_name: req.user!.fullName },
+        comment: result.rows[0],
         ...(parsedComment.data.visibility === "requester"
           ? { emailNotificationQueued: true }
           : {}),
@@ -494,7 +692,8 @@ router.post(
       const { id } = requestIdSchema.parse(req.params);
       await client.query("BEGIN");
       const current = await client.query(
-        `SELECT request.status, request.display_code, account.email,
+        `SELECT request.status, request.id, request.requester_id,
+                request.display_code, account.email,
                 account.full_name, document.name AS document_name
          FROM requests AS request
          INNER JOIN users AS account ON account.id = request.requester_id
@@ -528,6 +727,13 @@ router.post(
              (request_id, from_status, to_status, changed_by, comment)
               VALUES ($1, $2, 'ready_for_retrieval', $3, 'Ready for pickup')`,
              [id, request.status, req.user!.id],
+        );
+        await client.query(
+          `INSERT INTO notifications (user_id, request_id, channel, type, title, message)
+           VALUES ($1, $2, 'in_app', 'document_ready_for_pickup',
+                   'Document ready for pickup',
+                   'Your document request ' || $3 || ' is ready for pickup.')`,
+          [request.requester_id, id, request.display_code],
         );
       }
       await client.query("COMMIT");
@@ -663,6 +869,19 @@ router.post(
          VALUES ($1, $2, $3)
          RETURNING id, file_data, original_name, status, comment, submitted_at, reviewed_at`,
         [req.user!.id, parsed.data.fileData, parsed.data.originalName],
+      );
+      await client.query(
+        `INSERT INTO notifications (user_id, channel, type, title, message)
+         SELECT assignment.user_id, 'in_app', 'registrar_clearance_submitted',
+                'New clearance verification request',
+                CONCAT('Clearance submitted by ', student.full_name, ' for verification.')
+         FROM user_roles AS assignment
+         INNER JOIN roles AS account_role
+           ON account_role.id = assignment.role_id
+         CROSS JOIN users AS student
+         WHERE lower(account_role.name) = 'registrar'
+           AND student.id = $1`,
+        [req.user!.id],
       );
       await client.query("COMMIT");
       return res.status(201).json({ clearance: result.rows[0] });
@@ -890,16 +1109,36 @@ router.get(
          ORDER BY
            CASE
              WHEN $1::text IS NULL
-               OR account.full_name ILIKE $1
-               OR CONCAT_WS(' ', directory.first_name, directory.middle_name, directory.last_name) ILIKE $1
-               OR COALESCE(account.student_id, '') ILIKE $1
-               OR account.email ILIKE $1
+               AND NULLIF(BTRIM(account.student_id), '') ~ '^[0-9]+$'
+             THEN BTRIM(account.student_id)::numeric
+           END ASC NULLS LAST,
+           CASE WHEN $1::text IS NULL THEN account.student_id END ASC NULLS LAST,
+           CASE
+             WHEN $1::text IS NOT NULL
+               AND (
+                 account.full_name ILIKE $1
+                 OR CONCAT_WS(' ', directory.first_name, directory.middle_name, directory.last_name) ILIKE $1
+                 OR COALESCE(account.student_id, '') ILIKE $1
+                 OR account.email ILIKE $1
+               )
              THEN 0
-             ELSE 1
-           END,
-           name_similarity DESC,
-           full_name ASC,
-           account.student_id ASC NULLS LAST,
+             WHEN $1::text IS NOT NULL THEN 1
+           END ASC,
+           CASE
+             WHEN $1::text IS NOT NULL
+             THEN GREATEST(
+               public.similarity(lower(account.full_name), lower($2::text)),
+               public.similarity(
+                 lower(CONCAT_WS(
+                   ' ',
+                   directory.first_name,
+                   directory.middle_name,
+                   directory.last_name
+                 )),
+                 lower($2::text)
+               )
+             )
+           END DESC,
            account.id ASC
          LIMIT 25`,
         [
@@ -1005,8 +1244,10 @@ router.post(
       });
     }
 
+    const client = await pool.connect();
     try {
-      const result = await pool.query(
+      await client.query("BEGIN");
+      const result = await client.query(
         `UPDATE clearance_submissions
          SET status = 'needs_update', comment = $1, reviewed_by = $2, reviewed_at = NOW()
          WHERE id = $3
@@ -1018,17 +1259,60 @@ router.post(
                AND (newer.submitted_at, newer.id) >
                    (clearance_submissions.submitted_at, clearance_submissions.id)
            )
-         RETURNING id, status, comment, reviewed_at`,
+         RETURNING id, user_id, status, comment, reviewed_at`,
         [parsed.data.comment, req.user!.id, id.data],
       );
       if (result.rowCount === 0) {
+        await client.query("ROLLBACK");
         return res.status(409).json({
           error: "Only a verified clearance can be invalidated.",
         });
       }
+
+      const clearance = result.rows[0];
+      await client.query(
+        `WITH affected_requests AS MATERIALIZED (
+           SELECT id, status AS previous_status
+           FROM requests
+           WHERE requester_id = $1
+             AND status NOT IN (
+               'saso_review', 'fulfilled', 'rejected', 'cancelled',
+               'registrar_rejected', 'saso_rejected'
+             )
+         ),
+         updated_requests AS (
+           UPDATE requests AS request_row
+           SET status = 'saso_review', updated_at = NOW()
+           FROM affected_requests
+           WHERE request_row.id = affected_requests.id
+           RETURNING request_row.id
+         )
+         INSERT INTO request_status_history
+           (request_id, from_status, to_status, changed_by, comment)
+         SELECT updated_requests.id, affected_requests.previous_status,
+                'saso_review', $2, 'Clearance invalidated'
+         FROM updated_requests
+         INNER JOIN affected_requests
+           ON affected_requests.id = updated_requests.id`,
+        [clearance.user_id, req.user!.id],
+      );
+      await client.query(
+        `INSERT INTO notifications (user_id, channel, type, title, message)
+         VALUES (
+           $1, 'in_app', 'clearance_invalidated', 'Clearance invalidated',
+           'The Registrar invalidated your verified clearance. Registrar comment: '
+             || COALESCE(NULLIF($2, ''), 'No comment was provided.')
+             || ' Submit an updated clearance.'
+         )`,
+        [clearance.user_id, clearance.comment],
+      );
+      await client.query("COMMIT");
       return res.json({ clearance: result.rows[0] });
     } catch (error) {
+      await client.query("ROLLBACK");
       return next(error);
+    } finally {
+      client.release();
     }
   },
 );
@@ -1044,12 +1328,22 @@ router.post(
       return res.status(400).json({ error: "Invalid clearance review" });
     }
 
+    const client = await pool.connect();
     try {
-      const result = await pool.query(
+      await client.query("BEGIN");
+      const result = await client.query(
         `UPDATE clearance_submissions
          SET status = $1, comment = $2, reviewed_by = $3, reviewed_at = NOW()
-         WHERE id = $4 AND status = 'submitted'
-         RETURNING id, status, comment, reviewed_at`,
+         WHERE id = $4
+           AND status = 'submitted'
+           AND NOT EXISTS (
+             SELECT 1
+             FROM clearance_submissions AS newer
+             WHERE newer.user_id = clearance_submissions.user_id
+               AND (newer.submitted_at, newer.id) >
+                   (clearance_submissions.submitted_at, clearance_submissions.id)
+           )
+         RETURNING id, user_id, status, comment, reviewed_at`,
         [
           parsed.data.decision,
           parsed.data.comment || null,
@@ -1058,13 +1352,79 @@ router.post(
         ],
       );
       if (result.rowCount === 0) {
+        await client.query("ROLLBACK");
         return res.status(409).json({
           error: "This clearance was already reviewed or is no longer available.",
         });
       }
+
+      const clearance = result.rows[0];
+      if (clearance.status === "verified") {
+        await client.query(
+          `WITH requests_to_restore AS MATERIALIZED (
+             SELECT request_row.id, request_row.status AS previous_status,
+                    COALESCE(
+                      (
+                        SELECT history.from_status
+                        FROM request_status_history AS history
+                        WHERE history.request_id = request_row.id
+                          AND history.to_status = request_row.status
+                          AND history.from_status IS NOT NULL
+                        ORDER BY history.created_at DESC, history.id DESC
+                        LIMIT 1
+                      ),
+                      'submitted'::request_status
+                    ) AS restored_status
+             FROM requests AS request_row
+             WHERE request_row.requester_id = $1
+               AND request_row.status IN ('registrar_approved', 'saso_review')
+           ),
+           updated_requests AS (
+             UPDATE requests AS request_row
+             SET status = requests_to_restore.restored_status, updated_at = NOW()
+             FROM requests_to_restore
+             WHERE request_row.id = requests_to_restore.id
+             RETURNING request_row.id
+           )
+           INSERT INTO request_status_history
+             (request_id, from_status, to_status, changed_by, comment)
+           SELECT updated_requests.id, requests_to_restore.previous_status,
+                  requests_to_restore.restored_status, $2,
+                  'Clearance verified; restored previous request status'
+           FROM updated_requests
+           INNER JOIN requests_to_restore
+             ON requests_to_restore.id = updated_requests.id`,
+          [clearance.user_id, req.user!.id],
+        );
+      }
+      await client.query(
+        `INSERT INTO notifications (user_id, channel, type, title, message)
+         VALUES (
+           $1, 'in_app',
+           CASE WHEN $2::text = 'verified'
+             THEN 'clearance_verified'
+             ELSE 'clearance_needs_update'
+           END,
+           CASE WHEN $2::text = 'verified'
+             THEN 'Clearance verified'
+             ELSE 'Clearance declined — update required'
+           END,
+           CASE WHEN $2::text = 'verified'
+             THEN 'The Registrar verified your clearance.'
+             ELSE 'The Registrar reviewed your clearance and requested an update. Registrar comment: '
+               || COALESCE(NULLIF($3::text, ''), 'No comment was provided.')
+               || ' Submit a corrected copy.'
+           END
+         )`,
+        [clearance.user_id, clearance.status, clearance.comment],
+      );
+      await client.query("COMMIT");
       return res.json({ clearance: result.rows[0] });
     } catch (error) {
+      await client.query("ROLLBACK");
       return next(error);
+    } finally {
+      client.release();
     }
   },
 );
@@ -1172,7 +1532,7 @@ router.post(
         `SELECT id, status
          FROM requests
          WHERE id = $1 AND requester_id = $2
-         FOR UPDATE`,
+         FOR UPDATE OF request_row`,
         [id, req.user!.id],
       );
 
@@ -1224,9 +1584,11 @@ router.post(
 
       await client.query("BEGIN");
       const result = await client.query(
-        `SELECT id, display_code, status, additional_details
-         FROM requests
-         WHERE id = $1 AND requester_id = $2
+        `SELECT request_row.id, request_row.display_code, request_row.status,
+                request_row.additional_details, requester.full_name AS requester_name
+         FROM requests AS request_row
+         INNER JOIN users AS requester ON requester.id = request_row.requester_id
+         WHERE request_row.id = $1 AND request_row.requester_id = $2
          FOR UPDATE`,
         [id, req.user!.id],
       );
@@ -1293,6 +1655,18 @@ router.post(
         );
       }
 
+      await client.query(
+        `INSERT INTO notifications (user_id, request_id, channel, type, title, message)
+         SELECT assignment.user_id, $1, 'in_app', 'registrar_payment_proof_submitted',
+                'New payment proof submitted',
+                CONCAT('Payment proof submitted by ', $2::text, ' for request ', $3::text, '.')
+         FROM user_roles AS assignment
+         INNER JOIN roles AS account_role
+           ON account_role.id = assignment.role_id
+         WHERE lower(account_role.name) = 'registrar'`,
+        [id, request.requester_name, request.display_code],
+      );
+
       await client.query("COMMIT");
       res.status(201).json({
         receiptUrl: input.receiptDataUrl,
@@ -1321,7 +1695,7 @@ router.post(
       const input = paymentSchema.parse(req.body);
       await client.query("BEGIN");
       const result = await client.query(
-        `SELECT request_row.id, request_row.status, request_row.fee_amount,
+        `SELECT request_row.id, request_row.requester_id, request_row.status, request_row.fee_amount,
                 request_row.fee_currency, request_row.display_code,
                 request_row.additional_details, requester.full_name AS requester_name,
                 requester.email AS requester_email, document_type.name AS document_name
@@ -1406,7 +1780,7 @@ router.post(
               documentName: request.document_name,
               amount: input.amount,
               currency: input.currency,
-              method: input.method === "gcash" ? "GCash" : "Cash",
+              method: "Cash",
               reference:
                 input.providerReference ??
                 request.additional_details?.paymentReference ??
@@ -1425,7 +1799,7 @@ router.post(
           input.amount.toFixed(2),
           input.currency,
           input.method,
-          input.method === "gcash" ? "GCash" : "Cash",
+          "Cash",
           input.providerReference ?? null,
           input.status,
           input.status === "succeeded" ? req.user!.id : null,
@@ -1462,6 +1836,15 @@ router.post(
           input.notes ?? `Registrar cash payment status: ${input.status}`,
         ],
       );
+      if (input.status === "succeeded") {
+        await client.query(
+          `INSERT INTO notifications (user_id, request_id, channel, type, title, message)
+           VALUES ($1, $2, 'in_app', 'payment_confirmed',
+                   'Payment confirmed',
+                   'Your payment for request ' || $3 || ' has been confirmed.')`,
+          [request.requester_id, id, request.display_code],
+        );
+      }
       await client.query("COMMIT");
       if (emailNotification) {
         const receiptDataUrl =

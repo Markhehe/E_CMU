@@ -59,6 +59,7 @@ router.post("/", requireAuth, requireRole("student"), async (req, res, next) => 
 
       const additionalDetails = {
         ...data.additionalDetails,
+        collectionMethod: "Pick-up",
         paymentMethod: "Pay at the Office",
       };
       const result = await client.query(
@@ -82,6 +83,19 @@ router.post("/", requireAuth, requireRole("student"), async (req, res, next) => 
            (request_id, from_status, to_status, changed_by, comment)
          VALUES ($1, NULL, 'submitted', $2, 'Request submitted')`,
         [createdRequest.id, req.user.id],
+      );
+      await client.query(
+        `INSERT INTO notifications (user_id, request_id, channel, type, title, message)
+         SELECT assignment.user_id, $1, 'in_app', 'registrar_request_submitted',
+                'New document request',
+                CONCAT('New request from ', student.full_name, ' (', $3::text, ').')
+         FROM user_roles AS assignment
+         INNER JOIN roles AS account_role
+           ON account_role.id = assignment.role_id
+         CROSS JOIN users AS student
+         WHERE lower(account_role.name) = 'registrar'
+           AND student.id = $2`,
+        [createdRequest.id, req.user.id, createdRequest.display_code],
       );
       await client.query("COMMIT");
       return res.status(201).json({ request: createdRequest });
