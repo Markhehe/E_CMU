@@ -39,7 +39,7 @@ router.get(
              FROM requests AS request_row
              INNER JOIN users AS requester ON requester.id = request_row.requester_id
              INNER JOIN document_types AS document ON document.id = request_row.document_type_id
-             WHERE request_row.status IN ('submitted', 'registrar_review', 'needs_information')
+             WHERE request_row.status IN ('submitted', 'registrar_review')
              ORDER BY request_row.submitted_at DESC`,
           ),
           pool.query(
@@ -305,7 +305,6 @@ const registrarInterventionStatuses = [
   ...registrarReviewStatuses,
   "registrar_approved",
   "saso_review",
-  "saso_cleared",
   "awaiting_payment",
   "payment_review",
   "paid",

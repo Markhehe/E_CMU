@@ -90,6 +90,13 @@ const requestStatuses = [
   "payment_review",
   "ready_for_retrieval",
 ] as const;
+const demoRequestStatuses = requestStatuses.filter(
+  (status) => (
+    status !== "registrar_approved" &&
+    status !== "saso_review" &&
+    status !== "saso_cleared"
+  ),
+);
 const demoRequestFixtures = [
   { status: "submitted", requesterIndex: 0 },
   { status: "needs_information", requesterIndex: 0 },
@@ -105,7 +112,7 @@ const demoRequestFixtures = [
   { status: "awaiting_payment", requesterIndex: 8 },
   { status: "registrar_rejected", requesterIndex: 9 },
   { status: "processing", requesterIndex: 10 },
-  { status: "saso_cleared", requesterIndex: 11 },
+  { status: "awaiting_payment", requesterIndex: 11 },
   { status: "saso_rejected", requesterIndex: 12 },
   { status: "payment_review", requesterIndex: 13 },
   { status: "ready_for_retrieval", requesterIndex: 14 },
@@ -140,14 +147,14 @@ async function seedDemoRequests(
 ) {
   if (
     demoRequestFixtures.length !== 30 ||
-    requestStatuses.some(
+    demoRequestStatuses.some(
       (status) => !demoRequestFixtures.some((fixture) => fixture.status === status),
     ) ||
     demoRequestFixtures.some(
       (fixture) => fixture.requesterIndex >= students.length,
     )
   ) {
-    throw new Error("Demo request fixtures must include 30 requests and every request status.");
+    throw new Error("Demo request fixtures must include 30 requests and every required request status.");
   }
 
   const studentAccounts = await client.query<{ id: string; email: string }>(
