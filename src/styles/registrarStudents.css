@@ -1,0 +1,378 @@
+.student-records-page {
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  gap: 0.75rem;
+  
+}
+
+.student-records-page .dashboard-header {
+  margin-bottom: 0;
+}
+
+.student-records-toolbar {
+  align-items: stretch;
+}
+
+.student-records-toolbar .toolbar-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.student-records-section,
+.student-records-profile,
+.student-records-history {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--surface-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.student-records-section {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.student-records-section-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+}
+
+.student-records-section-heading .settings-section-title {
+  margin-bottom: 0.2rem;
+}
+
+.student-records-section-heading .dashboard-subtext {
+  margin: 0;
+  padding-bottom: 0.25rem;
+}
+
+.student-records-table {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  border: 0;
+  border-top: 1px solid var(--border-light);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.student-records-table .request-table {
+  min-width: 650px;
+  table-layout: auto;
+}
+
+.student-records-action-heading,
+.student-records-action-cell {
+  text-align: right !important;
+}
+
+.student-records-view-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 8rem;
+  min-height: 2.45rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--imperial-blue);
+  border-radius: 999px;
+  background: var(--imperial-blue);
+  color: var(--surface-white);
+  box-shadow: 0 3px 9px rgba(2, 35, 96, 0.16);
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.workflow-step-button.student-records-view-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #123b7a;
+  background: #123b7a;
+  color: var(--surface-white);
+  box-shadow: 0 5px 12px rgba(2, 35, 96, 0.22);
+}
+
+.workflow-step-button.student-records-view-button:focus-visible {
+  outline: 3px solid var(--honey-bronze);
+  outline-offset: 2px;
+}
+
+.workflow-step-button.student-records-view-button:disabled {
+  opacity: 0.58;
+  box-shadow: none;
+}
+
+.student-records-back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  align-self: flex-end;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.8rem;
+  margin-bottom: 0.35rem;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--surface-white);
+  color: var(--imperial-blue);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.student-records-back-button:hover {
+  border-color: var(--imperial-blue);
+  background: #f3f6fb;
+}
+
+.student-records-back-button:focus-visible {
+  outline: 3px solid var(--honey-bronze);
+  outline-offset: 2px;
+}
+
+.student-records-profile,
+.student-records-history {
+  flex: 0 0 auto;
+  max-width: none;
+  padding: 1rem;
+}
+
+.student-records-profile {
+  padding-top: 0;
+}
+
+.student-records-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 0.85rem 1.5rem;
+  margin: 0;
+}
+
+.student-records-profile-grid > div {
+  min-width: 0;
+}
+
+.student-records-profile-grid dt {
+  margin-bottom: 0.2rem;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.student-records-profile-grid dd {
+  margin: 0;
+  color: #27272a;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+
+.student-records-history .settings-section-title {
+  margin-bottom: 0.75rem;
+}
+
+.student-records-history .request-table-wrapper {
+  max-height: 320px;
+  flex: 0 1 auto;
+}
+
+.student-current-clearance {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: #f8f9fa;
+}
+
+.student-current-clearance-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.student-current-clearance-label {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.student-current-clearance-details > strong {
+  color: var(--imperial-blue);
+  font-size: 1rem;
+}
+
+.student-current-clearance-comment {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.student-current-clearance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.student-records-page .btn-danger {
+  padding: 0.42rem 0.7rem;
+  border: 1px solid #dc3545;
+  border-radius: 6px;
+  background: #fff;
+  color: #b42332;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.student-records-page .btn-danger:hover:not(:disabled) {
+  background: #b42332;
+  color: #fff;
+}
+
+.student-records-page .btn-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.student-invalidation-warning {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem;
+  border-left: 3px solid #dc3545;
+  background: #fff5f5;
+  color: #7a2630;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.student-invalidation-warning + .auth-label {
+  margin-top: 0.25rem;
+}
+
+.student-records-page #student-clearance-invalidation-reason {
+  resize: vertical;
+  min-height: 6rem;
+}
+
+.student-invalidation-form {
+  gap: 0.6rem;
+}
+
+.student-invalidation-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.student-invalidation-actions > button {
+  min-height: 2.75rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.student-invalidation-cancel {
+  border: 2px solid var(--imperial-blue);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--imperial-blue);
+  cursor: pointer;
+}
+
+.student-invalidation-cancel:hover:not(:disabled) {
+  background: #eef2ff;
+}
+
+.student-invalidation-cancel:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.student-records-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.student-records-loading {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .student-records-page {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .student-records-page .student-records-table {
+    flex: 0 1 auto;
+    max-height: min(48vh, 400px);
+    min-height: 220px;
+  }
+
+  .student-records-toolbar {
+    flex-direction: row;
+  }
+
+  .student-records-toolbar .btn-primary {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .student-invalidation-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .student-records-toolbar {
+    flex-direction: column;
+  }
+
+  .student-records-section-heading {
+    padding: 0.75rem;
+  }
+
+  .student-records-profile,
+  .student-records-history {
+    padding: 0.85rem;
+  }
+
+  .student-records-profile {
+    padding-top: 0;
+  }
+
+  .student-current-clearance {
+    flex-direction: column;
+  }
+
+  .student-current-clearance-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

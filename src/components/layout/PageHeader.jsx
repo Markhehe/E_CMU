@@ -16,10 +16,8 @@ function PageHeader({ onMenuClick }) {
   const navigate = useNavigate();
 
   const roleLabels = {
-    ADMIN: 'Registrar Admin',
-    FINANCE: 'Finance Officer',
-    SASO: 'SASO Officer',
-    STUDENT: 'Requester',
+    REGISTRAR: 'Registrar Officer',
+    STUDENT: 'Student',
   };
 
   // Derive display name and two-letter initials dynamically

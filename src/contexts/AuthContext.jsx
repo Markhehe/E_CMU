@@ -19,15 +19,11 @@ function toSessionUser(user) {
   const normalizedRoles = roles.map((r) => String(r).toLowerCase());
 
   let primaryRole = 'STUDENT';
-  if (normalizedRoles.includes('administrator') || normalizedRoles.includes('admin') || normalizedRoles.includes('registrar')) {
-    primaryRole = 'ADMIN';
-  } else if (normalizedRoles.includes('finance')) {
-    primaryRole = 'FINANCE';
-  } else if (normalizedRoles.includes('saso')) {
-    primaryRole = 'SASO';
+  if (normalizedRoles.includes('administrator') || normalizedRoles.includes('admin') || normalizedRoles.includes('registrar') || normalizedRoles.includes('saso')) {
+    primaryRole = 'REGISTRAR';
   }
 
-  const name = user.fullName || user.name || user.email || 'User';
+  const name = user.fullName || user.full_name || user.name || user.email || 'User';
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -42,6 +38,10 @@ function toSessionUser(user) {
     name,
     role: primaryRole,
     rawRoles: roles,
+    studentId: user.studentId || user.student_id || '',
+    birthdate: user.birthdate || '',
+    contactPhone: user.contactPhone || user.contact_phone || '',
+    contactAddress: user.contactAddress || user.contact_address || '',
     initials,
   };
 }
@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const savedSession = localStorage.getItem(SESSION_KEY);
-      return savedSession ? JSON.parse(savedSession) : null;
+      return savedSession ? toSessionUser(JSON.parse(savedSession)) : null;
     } catch {
       return null;
     }
@@ -122,9 +122,7 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated: !!currentUser,
       isLoading,
       // Role Convenience Helpers
-      isAdmin: currentUser?.role === 'ADMIN',
-      isFinance: currentUser?.role === 'FINANCE',
-      isSaso: currentUser?.role === 'SASO',
+      isRegistrar: currentUser?.role === 'REGISTRAR',
       isStudent: currentUser?.role === 'STUDENT',
       hasRole: (roleName) => currentUser?.role === String(roleName).toUpperCase(),
       login,

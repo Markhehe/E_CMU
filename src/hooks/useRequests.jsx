@@ -4,7 +4,7 @@
  * and server actions with automatic toast notifications.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DocumentService } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 
@@ -12,7 +12,7 @@ const STATUS_WEIGHTS = {
   'PENDING PAYMENT': 1,
   'PROCESSING': 2,
   'READY FOR PICKUP': 3,
-  'COMPLETED': 4,
+  'FULFILLED': 4,
   'REJECTED': 5,
 };
 
@@ -25,8 +25,36 @@ export function useRequests() {
   const { addToast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilterState] = useState('ALL');
   const [sortOption, setSortOption] = useState('DATE_DESC');
+  const [showFulfilledRequests, setShowFulfilledRequests] = useState(true);
+  const fulfilledVisibilityBeforeFilter = useRef(null);
+  const [showRejectedRequests, setShowRejectedRequests] = useState(true);
+  const rejectedVisibilityBeforeFilter = useRef(null);
+
+  const setStatusFilter = useCallback((nextStatusFilter) => {
+    if (nextStatusFilter === 'FULFILLED' && statusFilter !== 'FULFILLED') {
+      fulfilledVisibilityBeforeFilter.current = showFulfilledRequests;
+      setShowFulfilledRequests(true);
+    } else if (statusFilter === 'FULFILLED' && nextStatusFilter !== 'FULFILLED') {
+      if (fulfilledVisibilityBeforeFilter.current !== null) {
+        setShowFulfilledRequests(fulfilledVisibilityBeforeFilter.current);
+      }
+      fulfilledVisibilityBeforeFilter.current = null;
+    }
+
+    if (nextStatusFilter === 'REJECTED' && statusFilter !== 'REJECTED') {
+      rejectedVisibilityBeforeFilter.current = showRejectedRequests;
+      setShowRejectedRequests(true);
+    } else if (statusFilter === 'REJECTED' && nextStatusFilter !== 'REJECTED') {
+      if (rejectedVisibilityBeforeFilter.current !== null) {
+        setShowRejectedRequests(rejectedVisibilityBeforeFilter.current);
+      }
+      rejectedVisibilityBeforeFilter.current = null;
+    }
+
+    setStatusFilterState(nextStatusFilter);
+  }, [showFulfilledRequests, showRejectedRequests, statusFilter]);
 
   // Fetch / Refresh request list from server
   const fetchRequests = useCallback(async (showLoadingSpinner = false) => {
@@ -64,18 +92,18 @@ export function useRequests() {
     };
   }, [fetchRequests]);
 
-  // Workflow Action: Update SASO Clearance
+  // Registrar clearance verification
   const toggleClearance = useCallback(
     async (id, isCleared, notes = '') => {
       try {
-        await DocumentService.updateSasoClearance(id, isCleared, notes);
+        await DocumentService.updateClearance(id, isCleared, notes);
         addToast(
-          isCleared ? 'Request cleared by SASO.' : 'Request placed on hold by SASO.',
+          isCleared ? 'Clearance verified.' : 'Clearance requires follow-up.',
           isCleared ? 'success' : 'error'
         );
         await fetchRequests(false);
       } catch (err) {
-        addToast(err.message || 'Failed to update SASO clearance.', 'error');
+        addToast(err.message || 'Failed to update clearance.', 'error');
         throw err;
       }
     },
@@ -124,6 +152,15 @@ export function useRequests() {
     [runWorkflowAction]
   );
 
+  const startRequestProcessing = useCallback(
+    (id) =>
+      runWorkflowAction(
+        () => DocumentService.startRequestProcessing(id),
+        'Document processing started.'
+      ),
+    [runWorkflowAction]
+  );
+
   const markPickedUp = useCallback(
     (id) =>
       runWorkflowAction(
@@ -164,7 +201,18 @@ export function useRequests() {
         req.status?.toUpperCase() === statusFilter.toUpperCase() ||
         req.rawStatus?.toUpperCase() === statusFilter.toUpperCase();
 
-      return matchesSearch && matchesStatus;
+      const isFulfilled =
+        req.status?.toUpperCase() === 'FULFILLED' ||
+        req.rawStatus?.toUpperCase() === 'FULFILLED';
+      const matchesFulfilledVisibility = showFulfilledRequests || !isFulfilled;
+      const isRejected =
+        req.status?.toUpperCase() === 'REJECTED' ||
+        ['REJECTED', 'CANCELLED', 'REGISTRAR_REJECTED', 'SASO_REJECTED']
+          .includes(req.rawStatus?.toUpperCase());
+      const matchesRejectedVisibility = showRejectedRequests || !isRejected;
+
+      return matchesSearch && matchesStatus &&
+        matchesFulfilledVisibility && matchesRejectedVisibility;
     });
 
     // 2. Immutably Sort
@@ -190,7 +238,14 @@ export function useRequests() {
           return 0;
       }
     });
-  }, [requests, searchTerm, statusFilter, sortOption]);
+  }, [
+    requests,
+    searchTerm,
+    statusFilter,
+    sortOption,
+    showFulfilledRequests,
+    showRejectedRequests,
+  ]);
 
   return {
     requests: processedRequests,
@@ -202,12 +257,17 @@ export function useRequests() {
     setSearchTerm,
     statusFilter,
     setStatusFilter,
+    showFulfilledRequests,
+    setShowFulfilledRequests,
+    showRejectedRequests,
+    setShowRejectedRequests,
     sortOption,
     setSortOption,
     refreshRequests: () => fetchRequests(false),
     toggleClearance,
     reviewAsRegistrar,
     confirmPayment,
+    startRequestProcessing,
     markReadyForPickup,
     markPickedUp,
     markCommentsRead,

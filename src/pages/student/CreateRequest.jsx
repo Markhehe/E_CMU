@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { DocumentService } from '../../services/api';
+import StudentClearancePanel from '../../components/ui/StudentClearancePanel';
+import { useStudentClearance } from '../../hooks/useStudentClearance';
 import '../../styles/createRequest.css';
 
 const INITIAL_FORM_STATE = {
@@ -19,8 +21,18 @@ function formatCurrency(amount, currency = 'PHP') {
   }).format(amount);
 }
 
-function CreateRequest({ embedded = false, onRequestCreated }) {
+function CreateRequest({ embedded = false, onRequestCreated, clearanceState }) {
   const { addToast } = useToast();
+  const localClearanceState = useStudentClearance({ enabled: !clearanceState });
+  const {
+    clearance,
+    isLoading: isClearanceLoading,
+    isUploading: isClearanceUploading,
+    isDeleting: isClearanceDeleting,
+    isVerified: hasVerifiedClearance,
+    submitClearance,
+    deletePendingClearance,
+  } = clearanceState || localClearanceState;
 
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [catalog, setCatalog] = useState([]);
@@ -58,6 +70,25 @@ function CreateRequest({ embedded = false, onRequestCreated }) {
   }, [catalog, formData.docType]);
 
   const totalPrice = selectedDocInfo ? selectedDocInfo.price * Number(formData.quantity) : 0;
+
+  if (isClearanceLoading || !hasVerifiedClearance) {
+    return (
+      <div className="request-page-container">
+        <StudentClearancePanel
+          clearance={clearance}
+          isLoading={isClearanceLoading}
+          isUploading={isClearanceUploading}
+          isDeleting={isClearanceDeleting}
+          onSubmit={submitClearance}
+          onDelete={deletePendingClearance}
+          selectedFile={clearanceState?.selectedFile}
+          selectedImagePreview={clearanceState?.selectedImagePreview}
+          fileInputKey={clearanceState?.fileInputKey}
+          onSelectedFileChange={clearanceState?.onSelectedFileChange}
+        />
+      </div>
+    );
+  }
 
   // Validation function
   const validateForm = () => {
@@ -225,8 +256,7 @@ function CreateRequest({ embedded = false, onRequestCreated }) {
               value={formData.paymentMethod}
               onChange={handleChange}
             >
-              <option value="Pay at the Office">Pay at the Office (Cashier)</option>
-              <option value="Online">Online Payment (GCash/Bank)</option>
+              <option value="Pay at the Office">Cash at the Finance Office</option>
             </select>
           </div>
         </div>
@@ -262,8 +292,6 @@ function CreateRequest({ embedded = false, onRequestCreated }) {
 }
 
 function SuccessMessage({ data, onReset }) {
-  const isOnline = data.paymentMethod === 'Online';
-
   return (
     <div className="request-page-container">
       <div className="success-message card-ui" style={{ textAlign: 'center' }}>
@@ -283,37 +311,15 @@ function SuccessMessage({ data, onReset }) {
           Your request for <strong>{data.quantity}x {data.docType}</strong> has been saved.
         </p>
 
-        {isOnline ? (
-          <div className="success-details" style={{
-            margin: '2rem 0',
-            padding: '1rem',
-            backgroundColor: 'var(--parchment)',
-            borderRadius: '8px',
-          }}>
-            <p>
-              <strong>Online payment:</strong> Once your request is awaiting payment,
-              open its Dashboard actions to view the mock Scan to Pay option and upload your receipt.
-            </p>
-            <p><strong>Total Amount:</strong> {formatCurrency(data.totalPrice, data.currency)}</p>
-          </div>
-        ) : (
-          <div
-            className="success-details"
-            style={{
-              margin: '2rem 0',
-              padding: '1rem',
-              backgroundColor: 'var(--parchment)',
-              borderRadius: '8px',
-            }}
-          >
-            <p>
-              <strong>Payment:</strong> Please proceed to the Cashier.
-            </p>
-            <p>
-              <strong>Total Amount:</strong> {formatCurrency(data.totalPrice, data.currency)}
-            </p>
-          </div>
-        )}
+        <div className="success-details" style={{
+          margin: '2rem 0',
+          padding: '1rem',
+          backgroundColor: 'var(--parchment)',
+          borderRadius: '8px',
+        }}>
+          <p><strong>Payment:</strong> Bring a printed copy of this request and pay cash at the Finance Office.</p>
+          <p><strong>Total Amount:</strong> {formatCurrency(data.totalPrice, data.currency)}</p>
+        </div>
 
         <button onClick={onReset} className="submit-button mt-2">
           Submit Another Request

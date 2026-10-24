@@ -268,7 +268,7 @@ function VerificationCodeForm({
     try {
       const result = await AuthService.verifyEmail(email, verificationCode);
       addToast(result.message || 'Email verified successfully.', 'success');
-      onSuccess();
+      onSuccess(result);
     } catch (error) {
       addToast(error.message || 'Could not verify the code.', 'error');
     } finally {
@@ -331,7 +331,11 @@ function VerificationCodeForm({
  * Registration Modal Component
  */
 function RegistrationModal({ isOpen, onClose }) {
-  const [regData, setRegData] = useState({ email: '', password: '', confirmPassword: '' });
+  const [regData, setRegData] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState('');
@@ -340,15 +344,16 @@ function RegistrationModal({ isOpen, onClose }) {
   const [emailVerified, setEmailVerified] = useState(false);
 
   const { addToast } = useToast();
+  const { login } = useAuth();
 
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
-    if (regData.password !== regData.confirmPassword) {
-      addToast('Passwords do not match.', 'error');
-      return;
-    }
     if (!regData.email.toLowerCase().endsWith('@cityofmalabonuniversity.edu.ph')) {
       addToast('Use your @cityofmalabonuniversity.edu.ph email address.', 'error');
+      return;
+    }
+    if (regData.password !== regData.confirmPassword) {
+      addToast('Passwords do not match.', 'error');
       return;
     }
 
@@ -407,7 +412,10 @@ function RegistrationModal({ isOpen, onClose }) {
           <VerificationCodeForm
             email={confirmationEmail}
             emailDeliveryIssue={emailDeliveryIssue}
-            onSuccess={() => setEmailVerified(true)}
+            onSuccess={(result) => {
+              login(result.user);
+              setEmailVerified(true);
+            }}
             onResend={handleResendConfirmation}
             isResending={isResending}
           />
@@ -428,7 +436,7 @@ function RegistrationModal({ isOpen, onClose }) {
               disabled={isRegistering}
             />
             <p className="auth-hint">
-              Registration is restricted to official @cityofmalabonuniversity.edu.ph email addresses.
+              Use your official student email. The part before @ must match the StudentId on file with the Registrar.
             </p>
           </div>
 
@@ -459,10 +467,10 @@ function RegistrationModal({ isOpen, onClose }) {
           </div>
 
           <div className="form-field-group">
-            <label htmlFor="regConfirmPassword" className="auth-label">Confirm Password</label>
+            <label htmlFor="regConfirmPassword" className="auth-label">Re-enter password</label>
             <input
               id="regConfirmPassword"
-              type="password"
+              type={showRegPassword ? 'text' : 'password'}
               className="auth-input"
               placeholder="Re-enter your password"
               value={regData.confirmPassword}
@@ -492,6 +500,7 @@ function ResendConfirmationModal({ isOpen, onClose }) {
   const [isSending, setIsSending] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
   const { addToast } = useToast();
+  const { login } = useAuth();
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -526,7 +535,10 @@ function ResendConfirmationModal({ isOpen, onClose }) {
       ) : verificationEmail ? (
         <VerificationCodeForm
           email={verificationEmail}
-          onSuccess={() => setEmailVerified(true)}
+          onSuccess={(result) => {
+            login(result.user);
+            setEmailVerified(true);
+          }}
         />
       ) : (
         <form onSubmit={handleSubmit} className="auth-form">

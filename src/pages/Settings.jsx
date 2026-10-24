@@ -36,7 +36,8 @@ function Settings() {
   const { currentUser, updateUserProfile } = useAuth();
   const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState('profile');
-  const [name, setName] = useState(currentUser?.name || '');
+  const [contactPhone, setContactPhone] = useState(currentUser?.contactPhone || '');
+  const [contactAddress, setContactAddress] = useState(currentUser?.contactAddress || '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Security Tab Form State
@@ -51,20 +52,19 @@ function Settings() {
 
   const handleProfileUpdate = async (event) => {
     event.preventDefault();
-    const normalizedName = name.trim();
-    if (!normalizedName) {
-      addToast('Name cannot be empty.', 'error');
-      return;
-    }
-
     setIsSavingProfile(true);
     try {
-      const result = await AuthService.updateProfile({ name: normalizedName });
-      setName(result.user.fullName);
-      updateUserProfile({ name: result.user.fullName });
-      addToast('Name updated successfully.', 'success');
+      const result = await AuthService.updateProfile({
+        contactPhone: contactPhone.trim(),
+        contactAddress: contactAddress.trim(),
+      });
+      updateUserProfile({
+        contactPhone: result.user.contactPhone,
+        contactAddress: result.user.contactAddress,
+      });
+      addToast('Contact information updated successfully.', 'success');
     } catch (error) {
-      addToast(error.message || 'Failed to update name.', 'error');
+      addToast(error.message || 'Failed to update contact information.', 'error');
     } finally {
       setIsSavingProfile(false);
     }
@@ -173,51 +173,88 @@ function Settings() {
               <form onSubmit={handleProfileUpdate} data-action-cooldown="protected">
                 <div className="settings-profile-grid">
                   <div>
-                    <label className="settings-label" htmlFor="profileName">Name</label>
+                    <label className="settings-label" htmlFor="profileName">Name on student record</label>
                     <input
                       id="profileName"
                       type="text"
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
+                      value={currentUser?.name || ''}
                       className="form-input"
-                      maxLength={255}
-                      autoComplete="name"
-                      required
-                      disabled={isSavingProfile}
+                      disabled
                     />
                   </div>
 
                   <div>
-                    <label className="settings-label">Role</label>
+                    <label className="settings-label" htmlFor="profileStudentId">Student ID</label>
                     <input
+                      id="profileStudentId"
                       type="text"
-                      value={currentUser?.role || 'Student'}
+                      value={currentUser?.studentId || ''}
                       className="form-input role-input"
                       disabled
                     />
                   </div>
 
-                  <div className="full-width-col">
-                    <label className="settings-label">Email Address</label>
+                  <div>
+                    <label className="settings-label" htmlFor="profileBirthdate">Birthdate</label>
                     <input
+                      id="profileBirthdate"
+                      type="text"
+                      value={currentUser?.birthdate ? new Date(currentUser.birthdate).toLocaleDateString() : ''}
+                      className="form-input"
+                      disabled
+                    />
+                  </div>
+
+                  <div>
+                    <label className="settings-label" htmlFor="profileEmail">Email Address</label>
+                    <input
+                      id="profileEmail"
                       type="email"
                       value={currentUser?.email || 'user@cityofmalabonuniversity.edu.ph'}
                       className="form-input"
                       disabled
                     />
                   </div>
+
+                  <div>
+                    <label className="settings-label" htmlFor="contactPhone">Contact Number</label>
+                    <input
+                      id="contactPhone"
+                      type="tel"
+                      value={contactPhone}
+                      onChange={(event) => setContactPhone(event.target.value)}
+                      className="form-input"
+                      maxLength={40}
+                      autoComplete="tel"
+                      disabled={isSavingProfile}
+                    />
+                  </div>
+
+                  <div className="full-width-col">
+                    <label className="settings-label" htmlFor="contactAddress">Contact Address</label>
+                    <textarea
+                      id="contactAddress"
+                      value={contactAddress}
+                      onChange={(event) => setContactAddress(event.target.value)}
+                      className="form-input"
+                      maxLength={500}
+                      autoComplete="street-address"
+                      rows={3}
+                      disabled={isSavingProfile}
+                    />
+                  </div>
                 </div>
 
                 <div className="modal-actions" style={{ marginTop: '1rem' }}>
-                  <button type="submit" className="btn-primary" disabled={isSavingProfile || !name.trim()}>
-                    {isSavingProfile ? 'Saving...' : 'Save Name'}
+                  <button type="submit" className="btn-primary" disabled={isSavingProfile}>
+                    {isSavingProfile ? 'Saving...' : 'Save Contact Information'}
                   </button>
                 </div>
               </form>
 
               <div className="settings-callout-box">
                 <p className="settings-note">
-                  <strong>* Note:</strong> Your default name is taken from the part of your university email address before @. You can change the name displayed in the portal here. Your email address and student ID remain unchanged.
+                  <strong>* Note:</strong> Your name, student ID, and birthdate come from the Registrar’s student directory. Update your contact number and address here.
                 </p>
               </div>
             </div>

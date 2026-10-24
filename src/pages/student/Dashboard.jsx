@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRequests } from '../../hooks/useRequests';
 import { useActionMenu } from '../../hooks/useActionMenu';
@@ -6,7 +6,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { DocumentService } from '../../services/api';
 import { formatDate } from '../../utils/formatters';
 import StatusBadge from '../../components/ui/StatusBadge';
-import ClearanceBadge from '../../components/ui/ClearanceBadge';
+import StudentClearancePanel from '../../components/ui/StudentClearancePanel';
+import { useStudentClearance } from '../../hooks/useStudentClearance';
 import RequestDetailsModal from '../../components/ui/RequestDetailsModal';
 import RequestCommentsModal from '../../components/ui/RequestCommentsModal';
 import Modal from '../../components/ui/Modal';
@@ -20,6 +21,15 @@ import '../../styles/dashboard.css';
 
 function Dashboard() {
   const { currentUser } = useAuth();
+  const {
+    clearance,
+    isLoading: isClearanceLoading,
+    isUploading: isClearanceUploading,
+    isDeleting: isClearanceDeleting,
+    isVerified: hasVerifiedClearance,
+    submitClearance,
+    deletePendingClearance,
+  } = useStudentClearance();
   const { requests, isLoading, refreshRequests, markCommentsRead } = useRequests();
   const { openMenuId, setOpenMenuId, menuCoords, toggleMenu } = useActionMenu();
   const { addToast } = useToast();
@@ -28,47 +38,104 @@ function Dashboard() {
   const [isUploading, setIsUploading] = useState(false);
   const [viewingRequest, setViewingRequest] = useState(null);
   const [viewingReceiptRequest, setViewingReceiptRequest] = useState(null);
+  const [previewingUpload, setPreviewingUpload] = useState(null);
   const [commentingRequest, setCommentingRequest] = useState(null);
   const [isCreateRequestOpen, setIsCreateRequestOpen] = useState(false);
+  const [isClearanceModalOpen, setIsClearanceModalOpen] = useState(false);
+  const [selectedClearanceFile, setSelectedClearanceFile] = useState(null);
+  const [selectedClearancePreview, setSelectedClearancePreview] = useState(null);
+  const [clearanceFileInputKey, setClearanceFileInputKey] = useState(0);
+  const clearancePreviewRef = useRef(null);
 
   // File Upload Preview States
   const [selectedFile, setSelectedFile] = useState(null);
+  const [requestCopyFile, setRequestCopyFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [requestCopyPreviewUrl, setRequestCopyPreviewUrl] = useState(null);
   const [paymentReference, setPaymentReference] = useState('');
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('Pay at the Office');
-  const [isSavingPaymentMethod, setIsSavingPaymentMethod] = useState(false);
+  const [trackingCode, setTrackingCode] = useState('');
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    e.target.value = '';
+  useEffect(() => () => {
+    if (clearancePreviewRef.current) {
+      URL.revokeObjectURL(clearancePreviewRef.current);
+    }
+  }, []);
+
+  const handleClearanceFileChange = (file) => {
+    if (clearancePreviewRef.current) {
+      URL.revokeObjectURL(clearancePreviewRef.current);
+      clearancePreviewRef.current = null;
+    }
+
+    setSelectedClearanceFile(file);
+    if (!file) setClearanceFileInputKey((key) => key + 1);
+    if (file?.type.startsWith('image/')) {
+      const previewUrl = URL.createObjectURL(file);
+      clearancePreviewRef.current = previewUrl;
+      setSelectedClearancePreview(previewUrl);
+    } else {
+      setSelectedClearancePreview(null);
+    }
+  };
+
+  const handleFileChange = (e, kind) => {
+    const file = e.target.files?.[0];
     if (file) {
       if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-        addToast('Receipt must be a PNG, JPEG, or WebP image.', 'error');
+        addToast('Upload must be a PNG, JPEG, or WebP image.', 'error');
         e.target.value = '';
+        if (kind === 'receipt') {
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+          setSelectedFile(null);
+          setPreviewUrl(null);
+        } else {
+          if (requestCopyPreviewUrl) URL.revokeObjectURL(requestCopyPreviewUrl);
+          setRequestCopyFile(null);
+          setRequestCopyPreviewUrl(null);
+        }
         return;
       }
-      if (file.size > 5 * 1024 * 1024) {
-        addToast('Receipt image must be 5 MB or smaller.', 'error');
+      if (file.size > 2.5 * 1024 * 1024) {
+        addToast('Each uploaded image must be 2.5 MB or smaller.', 'error');
         e.target.value = '';
+        if (kind === 'receipt') {
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+          setSelectedFile(null);
+          setPreviewUrl(null);
+        } else {
+          if (requestCopyPreviewUrl) URL.revokeObjectURL(requestCopyPreviewUrl);
+          setRequestCopyFile(null);
+          setRequestCopyPreviewUrl(null);
+        }
         return;
       }
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setSelectedFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
+      if (kind === 'receipt') {
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        setSelectedFile(file);
+        setPreviewUrl(URL.createObjectURL(file));
+      } else {
+        if (requestCopyPreviewUrl) URL.revokeObjectURL(requestCopyPreviewUrl);
+        setRequestCopyFile(file);
+        setRequestCopyPreviewUrl(URL.createObjectURL(file));
+      }
     }
   };
 
   const closeUploadModal = () => {
     if (isUploading) return;
     setPaymentRequest(null);
+    setPreviewingUpload(null);
     setSelectedFile(null);
+    setRequestCopyFile(null);
     setPaymentReference('');
-    setSelectedPaymentMethod('Pay at the Office');
+    setTrackingCode('');
     if (previewUrl) URL.revokeObjectURL(previewUrl);
+    if (requestCopyPreviewUrl) URL.revokeObjectURL(requestCopyPreviewUrl);
     setPreviewUrl(null);
+    setRequestCopyPreviewUrl(null);
   };
 
-  const studentRequests = requests.filter(req => req.studentId === currentUser?.id);
+  const studentRequests = requests.filter(req => req.requesterId === currentUser?.id);
 
   const {
     mode,
@@ -83,52 +150,45 @@ function Dashboard() {
 
   const activeMenuRequest = studentRequests.find(req => req.id === openMenuId);
 
-  const openPaymentModal = (request) => {
-    setPaymentRequest(request);
-    setSelectedPaymentMethod(request.paymentMethod);
-    setOpenMenuId(null);
+  const handleCreateRequestClick = () => {
+    if (!hasVerifiedClearance) {
+      addToast('Clearance required.', 'warning');
+      setIsClearanceModalOpen(true);
+      return;
+    }
+
+    setIsCreateRequestOpen(true);
   };
 
-  const handlePaymentMethodChange = async () => {
-    if (!paymentRequest || isSavingPaymentMethod || selectedPaymentMethod === paymentRequest.paymentMethod) return;
-
-    setIsSavingPaymentMethod(true);
-    try {
-      await DocumentService.updateRequestPaymentMethod(paymentRequest.id, selectedPaymentMethod);
-      setPaymentRequest((current) => current
-        ? { ...current, paymentMethod: selectedPaymentMethod }
-        : current);
-      setSelectedFile(null);
-      setPaymentReference('');
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(null);
-      await refreshRequests();
-      addToast('Payment method updated.', 'success');
-    } catch (error) {
-      addToast(error.message || 'Failed to update payment method.', 'error');
-    } finally {
-      setIsSavingPaymentMethod(false);
-    }
+  const openPaymentModal = (request) => {
+    setPaymentRequest(request);
+    setTrackingCode(request.displayId);
+    setOpenMenuId(null);
   };
 
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedFile || !paymentRequest || paymentRequest.paymentMethod !== 'Online') return;
+    if (!selectedFile || !requestCopyFile || !paymentRequest) return;
 
     setIsUploading(true);
     try {
       await DocumentService.submitPaymentDetails(paymentRequest.id, {
-        paymentMethod: 'Online',
         paymentReference,
         receiptFile: selectedFile,
+        requestCopyFile,
+        trackingCode,
       });
-      addToast('Payment marked as sent. Receipt submitted for Finance verification.', 'success');
+      addToast('Payment receipt submitted for Registrar verification.', 'success');
       await refreshRequests();
       setPaymentRequest(null);
+      setPreviewingUpload(null);
       setSelectedFile(null);
+      setRequestCopyFile(null);
       setPaymentReference('');
       if (previewUrl) URL.revokeObjectURL(previewUrl);
+      if (requestCopyPreviewUrl) URL.revokeObjectURL(requestCopyPreviewUrl);
       setPreviewUrl(null);
+      setRequestCopyPreviewUrl(null);
     } catch (error) {
       addToast(error.message || 'Failed to submit payment proof.', 'error');
     } finally {
@@ -142,7 +202,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="dashboard-page">
+    <div className="dashboard-page student-dashboard-page">
 
       {/* 1. Integrated Header and Action Toolbar */}
       <header className="dashboard-header-container">
@@ -154,7 +214,7 @@ function Dashboard() {
             Track the status of your documents, payments, and clearances.
           </p>
           <p className="header-note">
-            * Note: Clearance requirements vary by document. Not all requests require SASO approval.
+            * Note: Clearance requirements vary by document.
           </p>
         </div>
 
@@ -162,13 +222,28 @@ function Dashboard() {
           <button
             type="button"
             className="btn-primary"
-            onClick={() => setIsCreateRequestOpen(true)}
+            onClick={handleCreateRequestClick}
+            disabled={isClearanceLoading}
+            title={isClearanceLoading ? 'Loading clearance status.' : undefined}
           >
             + Create a Document Request
           </button>
           <RequestDisplaySelect mode={mode} onChange={setMode} />
         </div>
       </header>
+
+      <StudentClearancePanel
+        clearance={clearance}
+        isLoading={isClearanceLoading}
+        isUploading={isClearanceUploading}
+        isDeleting={isClearanceDeleting}
+        onSubmit={submitClearance}
+        onDelete={deletePendingClearance}
+        selectedFile={selectedClearanceFile}
+        selectedImagePreview={selectedClearancePreview}
+        fileInputKey={clearanceFileInputKey}
+        onSelectedFileChange={handleClearanceFileChange}
+      />
 
       {/* 2. The Table */}
       <p className="table-scroll-hint">Scroll sideways to view all columns</p>
@@ -184,17 +259,16 @@ function Dashboard() {
             <tr>
               <th className="col-doc" style={{ width: '26%' }}>Document</th>
               <th className="col-date" style={{ width: '16%' }}>Date Requested</th>
-              <th className="col-clearance" style={{ width: '18%' }}>SASO Clearance</th>
               <th className="col-status" style={{ width: '15%' }}>Payment &amp; Status</th>
               <th className="col-actions" style={{ width: '25%', textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <TableSkeleton columns={5} rows={5} />
+              <TableSkeleton columns={4} rows={5} />
             ) : studentRequests.length === 0 ? (
               <TableEmptyState
-                colSpan={5}
+                colSpan={4}
                 title="No active requests"
                 subtext="When you request a document, it will appear here."
               />
@@ -228,26 +302,17 @@ function Dashboard() {
                     <div className="doc-meta">ID: {req.displayId || req.id} &nbsp;|&nbsp; QTY: {req.quantity}</div>
                   </td>
                   <td>{formatDate(req.date || req.dateRequested)}</td>
-                  <td><ClearanceBadge isCleared={req.sasoCleared} /></td>
                   <td className="col-status-cell" style={{ textAlign: 'center' }}>
                     <div className="status-stack" style={{ alignItems: 'center', justifyContent: 'center' }}>
                       <StatusBadge status={req.status} />
-                      {req.paymentMethod === 'Online' &&
-                        !req.hasReceipt &&
-                        ['awaiting_payment', 'payment_review'].includes(req.rawStatus) && (
-                          <span className="status-alert">Awaiting Receipt</span>
-                        )}
-                      {req.paymentMethod === 'Online' && req.hasReceipt && (
-                        <span className="status-alert">Payment sent - awaiting Finance</span>
+                      {req.rawStatus === 'payment_review' && (
+                        <span className="status-alert">Receipt submitted - awaiting Registrar</span>
                       )}
                     </div>
                   </td>
                   <td className="actions-cell">
                     <div className="workflow-inline-actions">
-                      {req.rawStatus === 'awaiting_payment' ||
-                        (req.paymentMethod === 'Online' &&
-                          !req.hasReceipt &&
-                          req.rawStatus === 'payment_review') ? (
+                      {['approved', 'awaiting_payment', 'payment_review'].includes(req.rawStatus) && !req.hasReceipt ? (
                           <button
                             type="button"
                             className="workflow-step-button is-payment-action"
@@ -256,12 +321,12 @@ function Dashboard() {
                               openPaymentModal(req);
                             }}
                           >
-                            {req.rawStatus === 'awaiting_payment' ? 'Payment Options' : 'Upload Receipt'}
+                            Upload payment proof
                           </button>
                         ) : null}
                       <button
                         type="button"
-                        className={`workflow-step-button${req.hasUnreadComments ? ' has-unread-comments' : ''}`}
+                        className={`workflow-step-button workflow-action-button${req.hasUnreadComments ? ' has-unread-comments' : ''}`}
                         aria-label={req.hasUnreadComments ? 'Comments, unread comments' : 'Comments'}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -339,6 +404,11 @@ function Dashboard() {
                 style={{ maxHeight: '360px', maxWidth: '100%', objectFit: 'contain', alignSelf: 'center' }}
               />
             )}
+            {viewingReceiptRequest.requestCopyUrl && (
+              <a href={viewingReceiptRequest.requestCopyUrl} target="_blank" rel="noreferrer">
+                View uploaded request copy
+              </a>
+            )}
           </div>
         )}
       </Modal>
@@ -352,21 +422,57 @@ function Dashboard() {
       )}
 
       <Modal
+        isOpen={isClearanceModalOpen}
+        onClose={() => setIsClearanceModalOpen(false)}
+        title="Clearance required"
+        maxWidth="620px"
+      >
+        <StudentClearancePanel
+          clearance={clearance}
+          isLoading={isClearanceLoading}
+          isUploading={isClearanceUploading}
+          isDeleting={isClearanceDeleting}
+          onSubmit={submitClearance}
+          onDelete={deletePendingClearance}
+          selectedFile={selectedClearanceFile}
+          selectedImagePreview={selectedClearancePreview}
+          fileInputKey={clearanceFileInputKey}
+          onSelectedFileChange={handleClearanceFileChange}
+        />
+      </Modal>
+
+      <Modal
         isOpen={isCreateRequestOpen}
         onClose={() => setIsCreateRequestOpen(false)}
         title="Create a Document Request"
         maxWidth="700px"
       >
         <div className="request-create-modal">
-          <CreateRequest embedded onRequestCreated={refreshRequests} />
+          <CreateRequest
+            embedded
+            onRequestCreated={refreshRequests}
+            clearanceState={{
+              clearance,
+              isLoading: isClearanceLoading,
+              isUploading: isClearanceUploading,
+              isDeleting: isClearanceDeleting,
+              isVerified: hasVerifiedClearance,
+              submitClearance,
+              deletePendingClearance,
+              selectedFile: selectedClearanceFile,
+              selectedImagePreview: selectedClearancePreview,
+              fileInputKey: clearanceFileInputKey,
+              onSelectedFileChange: handleClearanceFileChange,
+            }}
+          />
         </div>
       </Modal>
 
-      {/* 6. Online Payment and Receipt Modal */}
+      {/* 6. Cash payment proof upload */}
       <Modal
         isOpen={!!paymentRequest}
         onClose={closeUploadModal}
-        title="Payment Method / Receipt"
+        title="Upload Cash Payment Proof"
         maxWidth="520px"
       >
         {paymentRequest && (
@@ -378,75 +484,73 @@ function Dashboard() {
                 currency: paymentRequest.feeCurrency || 'PHP',
               }).format(paymentRequest.feeAmount)}</strong>
             </p>
-            {paymentRequest.rawStatus === 'awaiting_payment' && (
-              <>
-                <label className="auth-label" htmlFor="requestPaymentMethod">
-                  Payment method
-                </label>
-                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-                  <select
-                    id="requestPaymentMethod"
-                    className="auth-input"
-                    value={selectedPaymentMethod}
-                    onChange={(event) => setSelectedPaymentMethod(event.target.value)}
-                    disabled={isSavingPaymentMethod || isUploading}
-                  >
-                    <option value="Online">Online Payment (GCash/Bank)</option>
-                    <option value="Pay at the Office">Pay at the Office (Cashier)</option>
-                  </select>
+            <p className="modal-text">
+              Pay cash at the Finance Office. Upload a photo of the receipt and the printed request showing its tracking code, or show the physical receipt to the Registrar.
+            </p>
+            <form className="modal-form" onSubmit={handleUploadSubmit} data-action-cooldown="protected">
+              <label className="auth-label" htmlFor="trackingCode">Request tracking code</label>
+              <input
+                id="trackingCode"
+                className="auth-input"
+                value={trackingCode}
+                onChange={(event) => setTrackingCode(event.target.value.toUpperCase())}
+                maxLength={6}
+                pattern="[A-Fa-f0-9]{6}"
+                required
+                disabled={isUploading}
+              />
+              <label className="auth-label" htmlFor="requestCopyFile">Printed request copy</label>
+              <div className="cash-payment-file-row">
+                <input
+                  id="requestCopyFile"
+                  type="file"
+                  className="cash-payment-file-input"
+                  accept="image/png,image/jpeg,image/webp"
+                  required
+                  disabled={isUploading}
+                  onChange={(event) => handleFileChange(event, 'request')}
+                />
+                {requestCopyPreviewUrl && (
                   <button
                     type="button"
-                    className="btn-secondary"
-                    onClick={handlePaymentMethodChange}
-                    disabled={
-                      isSavingPaymentMethod ||
-                      isUploading ||
-                      selectedPaymentMethod === paymentRequest.paymentMethod
-                    }
+                    className="cash-payment-preview-button"
+                    onClick={() => setPreviewingUpload({
+                      src: requestCopyPreviewUrl,
+                      title: 'Printed request copy',
+                    })}
+                    aria-label="Preview printed request copy"
                   >
-                    {isSavingPaymentMethod ? 'Saving...' : 'Save'}
+                    Preview
                   </button>
-                </div>
-              </>
-            )}
-            {paymentRequest.rawStatus === 'awaiting_payment' &&
-              paymentRequest.paymentMethod === 'Online' && (
-              <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-                <div
-                  role="img"
-                  aria-label="Mock QR code placeholder"
-                  style={{
-                    width: '160px',
-                    height: '160px',
-                    backgroundColor: '#e9ecef',
-                    margin: '0 auto',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    borderRadius: '8px',
-                    fontSize: '3rem',
-                  }}
-                >
-                  📱
-                </div>
-                <p className="dashboard-subtext" style={{ marginBottom: 0 }}>
-                  Mock QR placeholder for testing only. No payment will be processed.
-                  Scan with your payment app, then attach your receipt below.
-                </p>
+                )}
               </div>
-            )}
-            {paymentRequest.paymentMethod === 'Pay at the Office' ? (
-              <p className="modal-text">
-                Please pay at the Cashier’s Office. You can switch back to online payment any time before payment is confirmed.
-              </p>
-            ) : (
-              <>
-                <p className="modal-text">
-                  Attach a picture of your GCash or bank transfer receipt for Finance to verify.
-                </p>
-                <form className="modal-form" onSubmit={handleUploadSubmit} data-action-cooldown="protected">
+              <label className="auth-label" htmlFor="paymentReceiptFile">Cash receipt</label>
+              <div className="cash-payment-file-row">
+                <input
+                  id="paymentReceiptFile"
+                  type="file"
+                  className="cash-payment-file-input"
+                  accept="image/png,image/jpeg,image/webp"
+                  required
+                  disabled={isUploading}
+                  onChange={(event) => handleFileChange(event, 'receipt')}
+                />
+                {previewUrl && (
+                  <button
+                    type="button"
+                    className="cash-payment-preview-button"
+                    onClick={() => setPreviewingUpload({
+                      src: previewUrl,
+                      title: 'Cash receipt',
+                    })}
+                    aria-label="Preview cash receipt"
+                  >
+                    Preview
+                  </button>
+                )}
+              </div>
               <label className="auth-label" htmlFor="paymentReference">
-                Payment reference number (optional)
+                Receipt/reference number (optional)
               </label>
               <input
                 id="paymentReference"
@@ -456,56 +560,32 @@ function Dashboard() {
                 maxLength={255}
                 disabled={isUploading}
               />
-
-              <input
-                id="paymentReceiptFile"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                aria-required="true"
-                disabled={isUploading}
-                className="receipt-file-input"
-                aria-label="Choose payment receipt image"
-                onChange={handleFileChange}
-              />
-              {previewUrl ? (
-                <div className="receipt-selected-card">
-                  <img src={previewUrl} alt="Selected receipt preview" />
-                  <div className="receipt-selected-info">
-                    <strong>Receipt ready to upload</strong>
-                    <span>{selectedFile.name}</span>
-                    <span>{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB · Image preview</span>
-                  </div>
-                  <label
-                    className="receipt-change-button"
-                    htmlFor="paymentReceiptFile"
-                  >
-                    Change
-                  </label>
-                </div>
-              ) : (
-                <label className="receipt-upload-zone" htmlFor="paymentReceiptFile">
-                  <span className="receipt-upload-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none">
-                      <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14.5v3A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5v-3" />
-                    </svg>
-                  </span>
-                  <strong>Choose your receipt image</strong>
-                  <span>PNG, JPG, or WebP · Up to 5 MB</span>
-                  <span className="receipt-upload-browse">Browse files</span>
-                </label>
-              )}
               <div className="modal-actions">
                 <button type="button" className="btn-secondary" onClick={closeUploadModal} disabled={isUploading}>
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary" disabled={isUploading || !selectedFile}>
-                  {isUploading ? 'Uploading...' : 'Submit'}
+                <button type="submit" className="btn-primary" disabled={isUploading || !selectedFile || !requestCopyFile}>
+                  {isUploading ? 'Uploading...' : 'Submit Proof'}
                 </button>
               </div>
-                </form>
-              </>
-            )}
+            </form>
           </>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(previewingUpload)}
+        onClose={() => setPreviewingUpload(null)}
+        title={previewingUpload?.title || 'Uploaded file preview'}
+        maxWidth="620px"
+        zIndex={10001}
+      >
+        {previewingUpload && (
+          <img
+            className="cash-payment-image-preview"
+            src={previewingUpload.src}
+            alt={`${previewingUpload.title} preview`}
+          />
         )}
       </Modal>
 

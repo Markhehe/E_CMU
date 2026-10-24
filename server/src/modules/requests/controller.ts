@@ -13,14 +13,14 @@ import {
 const adminStatusSchema = z.enum([
     "PROCESSING",
     "READY FOR PICKUP",
-    "COMPLETED",
+    "FULFILLED",
     "REJECTED",
 ]);
 
 const adminStatusValues = {
     PROCESSING: ["processing"],
     "READY FOR PICKUP": ["ready_for_retrieval", "ready"],
-    COMPLETED: ["fulfilled"],
+    FULFILLED: ["fulfilled"],
     REJECTED: ["rejected"],
 } as const;
 
@@ -212,7 +212,7 @@ export async function listDocumentRequests(
              FROM requests AS req
              INNER JOIN document_types AS doc ON doc.id = req.document_type_id
              INNER JOIN users AS usr ON usr.id = req.requester_id
-             ${canListAll ? "WHERE req.status <> 'fulfilled'" : "WHERE req.requester_id = $1"}
+             ${canListAll ? "" : "WHERE req.requester_id = $1"}
              ORDER BY req.submitted_at DESC`,
             [req.user.id, canListAll],
         );
@@ -236,7 +236,7 @@ export async function updateDocumentRequestStatus(
     const parsedStatus = adminStatusSchema.safeParse(req.body?.status);
     if (!parsedStatus.success) {
         return res.status(400).json({
-            error: "Status must be PROCESSING, READY FOR PICKUP, COMPLETED, or REJECTED",
+            error: "Status must be PROCESSING, READY FOR PICKUP, FULFILLED, or REJECTED",
         });
     }
 

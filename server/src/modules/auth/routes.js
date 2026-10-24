@@ -184,8 +184,41 @@ router.post("/verify-email", async (req, res, next) => {
             "DELETE FROM email_verification_tokens WHERE user_id = $1",
             [record.user_id]
         );
+        const userResult = await client.query(
+            `SELECT account.id, account.email, account.full_name, account.student_id,
+                    account.contact_phone, account.contact_address,
+                    account.stakeholder_type, directory.birthdate,
+                    COALESCE(array_agg(role.name) FILTER (WHERE role.name IS NOT NULL), '{}') AS roles
+             FROM users AS account
+             LEFT JOIN student_directory AS directory
+               ON directory.student_id = account.student_id
+             LEFT JOIN user_roles AS assignment ON assignment.user_id = account.id
+             LEFT JOIN roles AS role ON role.id = assignment.role_id
+             WHERE account.id = $1 AND account.active = TRUE
+             GROUP BY account.id, directory.birthdate`,
+            [record.user_id]
+        );
+        const user = userResult.rows[0];
+        if (!user) {
+            await client.query("ROLLBACK");
+            return res.status(403).json({ error: "This account is not active." });
+        }
         await client.query("COMMIT");
-        return res.json({ message: "Email confirmed. You can now sign in." });
+        setAuthCookie(res, createAccessToken(user));
+        return res.json({
+            message: "Email confirmed and signed in successfully.",
+            user: {
+                id: user.id,
+                email: user.email,
+                fullName: user.full_name,
+                studentId: user.student_id,
+                birthdate: user.birthdate,
+                contactPhone: user.contact_phone,
+                contactAddress: user.contact_address,
+                stakeholderType: user.stakeholder_type,
+                roles: user.roles,
+            },
+        });
     } catch (error) {
         if (client) await client.query("ROLLBACK");
         return next(error);

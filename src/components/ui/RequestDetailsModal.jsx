@@ -6,7 +6,6 @@
 
 import Modal from './Modal';
 import StatusBadge from './StatusBadge';
-import ClearanceBadge from './ClearanceBadge';
 import { formatDate } from '../../utils/formatters';
 
 function formatCurrency(amount, currency = 'PHP') {
@@ -124,13 +123,6 @@ const RequestDetailsModal = ({ isOpen, onClose, request }) => {
         <div className="detail-row" style={rowStyle}>
           <span style={labelStyle}>Collection Method</span>
           <span style={valueStyle}>{request.collectionMethod || 'Pick-up'}</span>
-        </div>
-
-        <div className="detail-row" style={rowStyle}>
-          <span style={labelStyle}>SASO Clearance</span>
-          <span>
-            <ClearanceBadge isCleared={request.sasoCleared} />
-          </span>
         </div>
 
         <div className="detail-row" style={{ ...rowStyle, borderBottom: 'none' }}>

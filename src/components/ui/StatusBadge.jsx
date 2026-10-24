@@ -4,7 +4,7 @@ import './statusBadge.css';
 const statusStyles = {
   'pending review': 'status-pending-review',
   'registrar review': 'status-registrar-review',
-  'saso review': 'status-saso-review',
+  'clearance review': 'status-clearance-review',
   'pending payment': 'status-pending',
   'paid': 'status-paid',
   'pending clearance': 'status-pending',

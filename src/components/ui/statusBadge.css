@@ -27,7 +27,7 @@
 
 .status-pending-review,
 .status-registrar-review,
-.status-saso-review {
+.status-clearance-review {
   background-color: color-mix(in srgb, var(--honey-bronze) 15%, transparent);
   color: var(--honey-bronze);
 }

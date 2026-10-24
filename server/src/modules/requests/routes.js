@@ -202,7 +202,7 @@ router.get("/", requireAuth, async (req, res, next) => {
        FROM requests req
        INNER JOIN document_types doc ON doc.id = req.document_type_id
        INNER JOIN users usr ON usr.id = req.requester_id
-       ${isStaff ? "WHERE req.status <> 'fulfilled'" : "WHERE req.requester_id = $1"}
+       ${isStaff ? "" : "WHERE req.requester_id = $1"}
        ORDER BY req.submitted_at DESC`,
       values,
     );

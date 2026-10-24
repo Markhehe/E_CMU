@@ -16,7 +16,7 @@ function RequestCommentsModal({ isOpen, onClose, request, onCommentsRead }) {
   const [isDeletingComment, setIsDeletingComment] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState(null);
   const isStaff = currentUser?.rawRoles?.some((role) =>
-    ['registrar', 'saso', 'finance', 'administrator'].includes(String(role).toLowerCase())
+    String(role).toLowerCase() === 'registrar'
   );
 
   useEffect(() => {
@@ -116,7 +116,7 @@ function RequestCommentsModal({ isOpen, onClose, request, onCommentsRead }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     {isStaff && (
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                        {item.visibility === 'staff' ? 'Staff only' : 'Visible to requester'}
+                        {item.visibility === 'staff' ? 'Staff only' : 'Visible to student'}
                       </span>
                     )}
                     {isStaff && String(item.author_id) === currentUser?.id && (
@@ -170,7 +170,7 @@ function RequestCommentsModal({ isOpen, onClose, request, onCommentsRead }) {
               aria-label="Comment visibility"
               disabled={isSaving}
             >
-              <option value="requester">Visible to requester</option>
+              <option value="requester">Visible to student</option>
               <option value="staff">Internal staff note</option>
             </select>
             <textarea

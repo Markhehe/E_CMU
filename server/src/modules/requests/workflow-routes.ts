@@ -744,7 +744,16 @@ router.get(
   "/clearances/archive",
   requireAuth,
   requireRole("registrar"),
-  async (_req: WorkflowRequest, res: Response, next: NextFunction) => {
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const query = z.string().trim().max(100).optional().safeParse(req.query.q);
+    if (!query.success) {
+      return res.status(400).json({ error: "Search must be 100 characters or fewer." });
+    }
+    const searchTerm = query.data || null;
+    if (searchTerm !== null && searchTerm.length < 2) {
+      return res.status(400).json({ error: "Enter at least 2 characters to search." });
+    }
+
     try {
       const result = await pool.query(
         `SELECT clearance.id, clearance.file_data, clearance.original_name,
@@ -761,8 +770,22 @@ router.get(
          FROM clearance_submissions AS clearance
          INNER JOIN users AS account ON account.id = clearance.user_id
          WHERE clearance.status = 'verified'
+           AND (
+             $1::text IS NULL
+             OR account.full_name ILIKE $1
+             OR COALESCE(account.student_id, '') ILIKE $1
+             OR account.email ILIKE $1
+             OR public.word_similarity(
+               lower($2::text),
+               lower(account.full_name)
+             ) >= 0.30
+           )
          ORDER BY clearance.reviewed_at DESC NULLS LAST,
                   clearance.submitted_at DESC`,
+        [
+          searchTerm === null ? null : `%${searchTerm}%`,
+          searchTerm ?? "",
+        ],
       );
       return res.json({ clearances: result.rows });
     } catch (error) {
@@ -787,7 +810,15 @@ router.get(
 
     try {
       const result = await pool.query(
-        `SELECT account.id,
+        `WITH search_terms AS MATERIALIZED (
+          SELECT DISTINCT split_terms.term
+          FROM regexp_split_to_table(
+            lower($2::text),
+            '[[:space:]]+'
+          ) AS split_terms(term)
+          WHERE split_terms.term <> ''
+        )
+         SELECT account.id,
                 COALESCE(
                   NULLIF(CONCAT_WS(' ', directory.first_name, directory.middle_name, directory.last_name), ''),
                   account.full_name
@@ -796,7 +827,22 @@ router.get(
                 account.email_verified,
                 account.student_id, account.contact_phone, account.contact_address,
                 directory.first_name, directory.middle_name, directory.last_name,
-                directory.birthdate, account.created_at
+                directory.birthdate, account.created_at,
+                GREATEST(
+                  public.similarity(
+                    lower(account.full_name),
+                    lower($2::text)
+                  ),
+                  public.similarity(
+                    lower(CONCAT_WS(
+                      ' ',
+                      directory.first_name,
+                      directory.middle_name,
+                      directory.last_name
+                    )),
+                    lower($2::text)
+                  )
+                ) AS name_similarity
          FROM users AS account
          INNER JOIN user_roles AS assignment ON assignment.user_id = account.id
          INNER JOIN roles AS account_role
@@ -810,10 +856,56 @@ router.get(
              OR CONCAT_WS(' ', directory.first_name, directory.middle_name, directory.last_name) ILIKE $1
              OR COALESCE(account.student_id, '') ILIKE $1
              OR account.email ILIKE $1
+             OR (
+               EXISTS (SELECT 1 FROM search_terms)
+               AND NOT EXISTS (
+                 SELECT 1
+                 FROM search_terms AS term
+                 WHERE NOT (
+                   (
+                     length(term.term) >= 3
+                     AND public.word_similarity(
+                       term.term,
+                       lower(COALESCE(directory.first_name, ''))
+                     ) >= 0.30
+                   )
+                   OR (
+                     length(term.term) >= 3
+                     AND public.word_similarity(
+                       term.term,
+                       lower(COALESCE(directory.middle_name, ''))
+                     ) >= 0.30
+                   )
+                   OR (
+                     length(term.term) >= 3
+                     AND public.word_similarity(
+                       term.term,
+                       lower(COALESCE(directory.last_name, ''))
+                     ) >= 0.30
+                   )
+                 )
+               )
+             )
            )
-         ORDER BY full_name ASC, account.student_id ASC NULLS LAST, account.id ASC
+         ORDER BY
+           CASE
+             WHEN $1::text IS NULL
+               OR account.full_name ILIKE $1
+               OR CONCAT_WS(' ', directory.first_name, directory.middle_name, directory.last_name) ILIKE $1
+               OR COALESCE(account.student_id, '') ILIKE $1
+               OR account.email ILIKE $1
+             THEN 0
+             ELSE 1
+           END,
+           name_similarity DESC,
+           full_name ASC,
+           account.student_id ASC NULLS LAST,
+           account.id ASC
          LIMIT 25`,
-        [searchTerm === null ? null : `%${searchTerm}%`],
+        [
+          searchTerm === null ? null : `%${searchTerm}%`,
+          searchTerm ?? "",
+        ],
       );
       return res.json({ students: result.rows });
     } catch (error) {
@@ -1146,7 +1238,7 @@ router.post(
       }
 
       const request = result.rows[0];
-      if (!["awaiting_payment", "payment_review"].includes(request.status)) {
+      if (!["approved", "awaiting_payment", "payment_review"].includes(request.status)) {
         await client.query("ROLLBACK");
         res.status(409).json({
           error: `Payment proof cannot be submitted while request status is ${request.status}`,
@@ -1249,7 +1341,7 @@ router.post(
       }
 
       const request = result.rows[0];
-      if (!["awaiting_payment", "payment_review"].includes(request.status)) {
+      if (!["approved", "awaiting_payment", "payment_review"].includes(request.status)) {
         await client.query("ROLLBACK");
         res.status(409).json({
           error: `Payment cannot be recorded while request status is ${request.status}`,
