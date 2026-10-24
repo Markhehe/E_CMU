@@ -3,7 +3,7 @@ import { requireAuth, requireRole } from "../../middleware/auth.js";
 import {
   listDocumentTypes,
   listDocumentRequests,
-  updateDocumentRequestStatus,
+  deletePendingStudentRequest,
 } from "./controller.js";
 import {
   createDocumentRequest,
@@ -13,11 +13,11 @@ const router = Router();
 
 router.get("/document-types", requireAuth, listDocumentTypes);
 router.post("/", requireAuth, createDocumentRequest);
-router.patch(
-  "/:id/status",
+router.delete(
+  "/:id",
   requireAuth,
-  requireRole("registrar"),
-  updateDocumentRequestStatus,
+  requireRole("student"),
+  deletePendingStudentRequest,
 );
 router.get("/", requireAuth, listDocumentRequests);
 

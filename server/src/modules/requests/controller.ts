@@ -1,28 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
 import { eq, and, asc } from "drizzle-orm";
 import { z } from "zod";
-import type { PoolClient } from "pg";
 import { db, pool } from "../../db/index.js";
 import { documentTypes } from "../../db/schema.js";
 import { createRequestSchema } from "./validation.js";
-import {
-    scheduleEmailNotification,
-    sendReadyForPickupEmail,
-} from "../../services/email.js";
-
-const adminStatusSchema = z.enum([
-    "PROCESSING",
-    "READY FOR PICKUP",
-    "FULFILLED",
-    "REJECTED",
-]);
-
-const adminStatusValues = {
-    PROCESSING: ["processing"],
-    "READY FOR PICKUP": ["ready_for_retrieval", "ready"],
-    FULFILLED: ["fulfilled"],
-    REJECTED: ["rejected"],
-} as const;
 
 export async function listDocumentTypes(
     _req: Request,
@@ -98,6 +79,23 @@ export async function createDocumentRequest(
         try {
             await client.query("BEGIN");
 
+            await client.query(
+                "SELECT id FROM users WHERE id = $1 FOR UPDATE",
+                [requesterId],
+            );
+            const concurrentRequests = await client.query<{ count: number }>(
+                `SELECT COUNT(*)::int AS count
+                 FROM requests
+                 WHERE requester_id = $1 AND status <> 'fulfilled'`,
+                [requesterId],
+            );
+            if (concurrentRequests.rows[0].count >= 5) {
+                await client.query("ROLLBACK");
+                return res.status(409).json({
+                    error: "You can have up to 5 concurrent requests. Fulfilled requests do not count toward this limit.",
+                });
+            }
+
             const inserted = await client.query(
                 `INSERT INTO requests (
                     requester_id,
@@ -111,7 +109,7 @@ export async function createDocumentRequest(
                 SELECT
                     $1,
                     doc.id,
-                    'submitted',
+                    'pending_review',
                     $2,
                     $3::jsonb,
                     doc.base_fee * $4,
@@ -151,7 +149,7 @@ export async function createDocumentRequest(
             await client.query(
                 `INSERT INTO request_status_history
                     (request_id, from_status, to_status, changed_by, comment)
-                 VALUES ($1, NULL, 'submitted', $2, 'Request submitted')`,
+                 VALUES ($1, NULL, 'pending_review', $2, 'Request submitted')`,
                 [createdRequest.id, requesterId],
             );
 
@@ -230,7 +228,7 @@ export async function listDocumentRequests(
     }
 }
 
-export async function updateDocumentRequestStatus(
+export async function deletePendingStudentRequest(
     req: Request,
     res: Response,
     next: NextFunction,
@@ -239,100 +237,45 @@ export async function updateDocumentRequestStatus(
     if (!parsedId.success) {
         return res.status(400).json({ error: "Invalid request ID" });
     }
-
-    const parsedStatus = adminStatusSchema.safeParse(req.body?.status);
-    if (!parsedStatus.success) {
-        return res.status(400).json({
-            error: "Status must be PROCESSING, READY FOR PICKUP, FULFILLED, or REJECTED",
-        });
+    if (!req.user) {
+        return res.status(401).json({ error: "Authentication required" });
     }
 
-    let client: PoolClient | undefined;
+    const client = await pool.connect();
     try {
-        client = await pool.connect();
-        const connection = client;
-        await connection.query("BEGIN");
-        const current = await connection.query(
-            `SELECT request.id, request.status, request.display_code, account.email,
-                    account.full_name, document.name AS document_name
-             FROM requests AS request
-             INNER JOIN users AS account ON account.id = request.requester_id
-             INNER JOIN document_types AS document ON document.id = request.document_type_id
-             WHERE request.id = $1
-             FOR UPDATE OF request`,
-            [parsedId.data],
+        await client.query("BEGIN");
+        const request = await client.query(
+            `SELECT status
+             FROM requests
+             WHERE id = $1 AND requester_id = $2
+             FOR UPDATE`,
+            [parsedId.data, req.user.id],
         );
-        if (current.rowCount === 0) {
-            await connection.query("ROLLBACK");
+        if (request.rowCount === 0) {
+            await client.query("ROLLBACK");
             return res.status(404).json({ error: "Request not found" });
         }
-
-        const statusEnums = await connection.query<{ enumlabel: string }>(
-            `SELECT enumlabel
-             FROM pg_enum
-             WHERE enumtypid = 'public.request_status'::regtype`,
-        );
-        const availableStatuses = new Set(
-            statusEnums.rows.map(({ enumlabel }) => enumlabel),
-        );
-        const nextStatus = adminStatusValues[parsedStatus.data].find((value) =>
-            availableStatuses.has(value),
-        );
-        if (!nextStatus) {
-            throw new Error(
-                `Database request_status enum does not support ${parsedStatus.data}`,
-            );
-        }
-
-        const previousStatus = current.rows[0].status as string;
-        const updated = await connection.query(
-            `UPDATE requests
-             SET status = $1, updated_at = NOW()
-             WHERE id = $2
-             RETURNING id, status, updated_at`,
-            [nextStatus, parsedId.data],
-        );
-
-        if (previousStatus !== nextStatus) {
-            await connection.query(
-                `INSERT INTO request_status_history
-                   (request_id, from_status, to_status, changed_by, comment)
-                 VALUES ($1, $2, $3, $4, $5)`,
-                [
-                    parsedId.data,
-                    previousStatus,
-                    nextStatus,
-                    req.user?.id,
-                    `Registrar changed status to ${parsedStatus.data}`,
-                ],
-            );
-        }
-
-        await connection.query("COMMIT");
-        const emailNotificationQueued =
-            previousStatus !== nextStatus &&
-            ["ready_for_retrieval", "ready"].includes(nextStatus);
-        if (emailNotificationQueued) {
-            const request = current.rows[0];
-            scheduleEmailNotification("ready-for-pickup", () =>
-                sendReadyForPickupEmail({
-                    email: request.email,
-                    fullName: request.full_name,
-                    documentName: request.document_name,
-                    requestCode: request.display_code,
-                }),
-            );
-        }
-        return res.json({
-            request: updated.rows[0],
-            ...(emailNotificationQueued ? { emailNotificationQueued: true } : {}),
-        });
-    } catch (error) {
-        if (client) {
+        if (request.rows[0].status !== "pending_review") {
             await client.query("ROLLBACK");
+            return res.status(409).json({
+                error: "Only requests pending review can be deleted.",
+            });
+        }
+
+        await client.query(
+            "DELETE FROM requests WHERE id = $1 AND requester_id = $2",
+            [parsedId.data, req.user.id],
+        );
+        await client.query("COMMIT");
+        return res.json({ success: true });
+    } catch (error) {
+        try {
+            await client.query("ROLLBACK");
+        } catch (rollbackError) {
+            console.error("Failed to roll back student request deletion:", rollbackError);
         }
         return next(error);
     } finally {
-        client?.release();
+        client.release();
     }
 }

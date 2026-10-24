@@ -17,6 +17,51 @@ const requestCommentSchema = z.object({
 const commentIdSchema = z.coerce.number().int().positive().safe();
 const staffRoles = ["registrar"];
 
+router.delete("/:id", requireAuth, requireRole("student"), async (req, res, next) => {
+  const parsedId = requestIdSchema.safeParse(req.params.id);
+  if (!parsedId.success) {
+    return res.status(400).json({ error: "Invalid request ID" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const request = await client.query(
+      `SELECT status
+       FROM requests
+       WHERE id = $1 AND requester_id = $2
+       FOR UPDATE`,
+      [parsedId.data, req.user.id],
+    );
+    if (request.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Request not found" });
+    }
+    if (request.rows[0].status !== "pending_review") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error: "Only requests pending review can be deleted.",
+      });
+    }
+
+    await client.query(
+      "DELETE FROM requests WHERE id = $1 AND requester_id = $2",
+      [parsedId.data, req.user.id],
+    );
+    await client.query("COMMIT");
+    return res.json({ success: true });
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      console.error("Failed to roll back student request deletion:", rollbackError);
+    }
+    return next(error);
+  } finally {
+    client.release();
+  }
+});
+
 router.get("/document-types", requireAuth, async (_req, res, next) => {
   try {
     const result = await pool.query(
@@ -42,6 +87,23 @@ router.post("/", requireAuth, requireRole("student"), async (req, res, next) => 
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      await client.query(
+        "SELECT id FROM users WHERE id = $1 FOR UPDATE",
+        [req.user.id],
+      );
+      const concurrentRequests = await client.query(
+        `SELECT COUNT(*)::int AS count
+         FROM requests
+         WHERE requester_id = $1 AND status <> 'fulfilled'`,
+        [req.user.id],
+      );
+      if (concurrentRequests.rows[0].count >= 5) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "You can have up to 5 concurrent requests. Fulfilled requests do not count toward this limit.",
+        });
+      }
+
       const clearanceResult = await client.query(
         `SELECT status
          FROM clearance_submissions
@@ -81,7 +143,7 @@ router.post("/", requireAuth, requireRole("student"), async (req, res, next) => 
       await client.query(
         `INSERT INTO request_status_history
            (request_id, from_status, to_status, changed_by, comment)
-         VALUES ($1, NULL, 'submitted', $2, 'Request submitted')`,
+         VALUES ($1, NULL, 'pending_review', $2, 'Request submitted')`,
         [createdRequest.id, req.user.id],
       );
       await client.query(

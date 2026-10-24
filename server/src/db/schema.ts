@@ -29,24 +29,15 @@ export const stakeholderType = pgEnum("stakeholder_type", [
 ]);
 
 export const requestStatus = pgEnum("request_status", [
-  "submitted",
-  "needs_information",
-  "approved",
-  "awaiting_payment",
+  "pending_review",
+  "on_hold",
+  "pending_payment",
+  "clearance_review",
   "paid",
   "processing",
-  "ready",
+  "ready_for_pickup",
   "fulfilled",
   "rejected",
-  "cancelled",
-  "registrar_review",
-  "registrar_approved",
-  "registrar_rejected",
-  "saso_review",
-  "saso_cleared",
-  "saso_rejected",
-  "payment_review",
-  "ready_for_retrieval",
 ]);
 
 export const reviewStage = pgEnum("review_stage", ["registrar", "saso"]);
@@ -254,7 +245,7 @@ export const requests = pgTable(
     documentTypeId: bigint("document_type_id", { mode: "number" })
       .notNull()
       .references(() => documentTypes.id),
-    status: requestStatus("status").notNull().default("submitted"),
+    status: requestStatus("status").notNull().default("pending_review"),
     purpose: text("purpose"),
     additionalDetails: jsonb("additional_details")
       .$type<Record<string, unknown>>()
@@ -365,8 +356,8 @@ export const requestStatusHistory = pgTable(
     requestId: uuid("request_id")
       .notNull()
       .references(() => requests.id, { onDelete: "cascade" }),
-    fromStatus: requestStatus("from_status"),
-    toStatus: requestStatus("to_status").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status").notNull(),
     changedBy: bigint("changed_by", { mode: "number" }).references(
       () => users.id,
     ),

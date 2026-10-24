@@ -39,7 +39,7 @@ router.get(
              FROM requests AS request_row
              INNER JOIN users AS requester ON requester.id = request_row.requester_id
              INNER JOIN document_types AS document ON document.id = request_row.document_type_id
-             WHERE request_row.status IN ('submitted', 'registrar_review')
+             WHERE request_row.status = 'pending_review'
              ORDER BY request_row.submitted_at DESC`,
           ),
           pool.query(
@@ -58,7 +58,10 @@ router.get(
                     requester.full_name AS requester_name
              FROM requests AS request_row
              INNER JOIN users AS requester ON requester.id = request_row.requester_id
-             WHERE request_row.status = 'payment_review'
+             WHERE request_row.status = 'pending_payment'
+               AND COALESCE(request_row.additional_details->>'receiptUrl',
+                            request_row.additional_details->>'receipt_url',
+                            request_row.additional_details->>'proof_of_payment') IS NOT NULL
              ORDER BY request_row.updated_at DESC`,
           ),
         ]);
@@ -184,6 +187,21 @@ const requestIdSchema = z.object({
   id: z.string().uuid(),
 });
 
+const directRequestStatuses = [
+  "pending_review",
+  "on_hold",
+  "pending_payment",
+  "clearance_review",
+  "paid",
+  "processing",
+  "ready_for_pickup",
+  "fulfilled",
+  "rejected",
+] as const;
+const directRequestStatusSchema = z.object({
+  status: z.enum(directRequestStatuses),
+});
+
 const reviewSchema = z.object({
   decision: z.enum(["approved", "rejected", "needs_information"]),
   comment: z.string().trim().max(240).optional(),
@@ -294,24 +312,135 @@ function requireRole(...allowedRoles: string[]) {
 }
 
 const registrarStatusByDecision = {
-  approved: "registrar_approved",
-  rejected: "registrar_rejected",
-  needs_information: "needs_information",
+  approved: "pending_payment",
+  rejected: "rejected",
+  needs_information: "on_hold",
 } as const;
 
-const registrarReviewStatuses = ["submitted", "registrar_review", "needs_information"] as const;
+const registrarReviewStatuses = ["pending_review", "on_hold"] as const;
 
 const registrarInterventionStatuses = [
   ...registrarReviewStatuses,
-  "registrar_approved",
-  "saso_review",
-  "awaiting_payment",
-  "payment_review",
+  "pending_payment",
+  "clearance_review",
   "paid",
   "processing",
-  "ready_for_retrieval",
-  "ready",
+  "ready_for_pickup",
 ] as const;
+
+router.patch(
+  "/:id/status",
+  requireAuth,
+  requireRole("registrar"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const parsedId = requestIdSchema.safeParse(req.params);
+    if (!parsedId.success) {
+      return res.status(400).json({ error: "Invalid request ID" });
+    }
+    const parsedStatus = directRequestStatusSchema.safeParse(req.body);
+    if (!parsedStatus.success) {
+      return res.status(400).json({
+        error: parsedStatus.error.issues[0]?.message || "Invalid request status",
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const requester = await client.query<{ requester_id: number }>(
+        "SELECT requester_id FROM requests WHERE id = $1",
+        [parsedId.data.id],
+      );
+      if (requester.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Request not found" });
+      }
+      await client.query(
+        "SELECT id FROM users WHERE id = $1 FOR UPDATE",
+        [requester.rows[0].requester_id],
+      );
+      const current = await client.query(
+        `SELECT id, requester_id, status
+         FROM requests
+         WHERE id = $1
+         FOR UPDATE`,
+        [parsedId.data.id],
+      );
+      if (current.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Request not found" });
+      }
+
+      const request = current.rows[0];
+      const nextStatus = parsedStatus.data.status;
+      if (request.status === nextStatus) {
+        await client.query("COMMIT");
+        return res.json({ status: nextStatus, changed: false });
+      }
+
+      if (request.status === "fulfilled" && nextStatus !== "fulfilled") {
+        const concurrentRequests = await client.query<{ count: number }>(
+          `SELECT COUNT(*)::int AS count
+           FROM requests
+           WHERE requester_id = $1
+             AND status <> 'fulfilled'
+             AND id <> $2`,
+          [request.requester_id, parsedId.data.id],
+        );
+        if (concurrentRequests.rows[0].count >= 5) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({
+            error: "This student already has 5 concurrent requests. Fulfilled requests do not count toward this limit.",
+          });
+        }
+      }
+
+      await client.query(
+        `UPDATE requests
+         SET status = $1::public.request_status,
+             completed_at = CASE WHEN $1 = 'fulfilled' THEN NOW() ELSE NULL END,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [nextStatus, parsedId.data.id],
+      );
+      await client.query(
+        `INSERT INTO request_status_history
+           (request_id, from_status, to_status, changed_by, comment)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          parsedId.data.id,
+          request.status,
+          nextStatus,
+          req.user!.id,
+          `Status manually changed by Registrar from ${request.status} to ${nextStatus}`,
+        ],
+      );
+      await client.query(
+        `INSERT INTO notifications
+           (user_id, request_id, channel, type, title, message)
+         SELECT $1, request_row.id, 'in_app', 'request_status_changed',
+                'Request status updated',
+                'The status of request ' || request_row.display_code ||
+                  ' was changed to ' || $2 || ' by the Registrar.'
+         FROM requests AS request_row
+         WHERE request_row.id = $3`,
+        [
+          request.requester_id,
+          nextStatus.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
+          parsedId.data.id,
+        ],
+      );
+
+      await client.query("COMMIT");
+      return res.json({ status: nextStatus, changed: true });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return next(error);
+    } finally {
+      client.release();
+    }
+  },
+);
 
 async function insertStatusChange(
   tx: any,
@@ -328,8 +457,8 @@ async function insertStatusChange(
 
   await tx.insert(requestStatusHistory).values({
     requestId,
-    fromStatus: fromStatus as any,
-    toStatus: toStatus as any,
+    fromStatus,
+    toStatus,
     changedBy,
     comment: comment ?? null,
   });
@@ -370,7 +499,7 @@ async function createReview(
     }
 
     const finalStatus =
-      decision === "approved" ? "awaiting_payment" : registrarStatusByDecision[decision];
+      registrarStatusByDecision[decision];
 
     const [review] = await tx
       .insert(requestReviews)
@@ -385,13 +514,13 @@ async function createReview(
 
     await tx
       .update(requests)
-      .set({ status: finalStatus as any, updatedAt: new Date() })
+      .set({ status: finalStatus, updatedAt: new Date() })
       .where(eq(requests.id, requestId));
 
     await tx.insert(requestStatusHistory).values({
       requestId,
-      fromStatus: request.status as any,
-      toStatus: finalStatus as any,
+      fromStatus: request.status,
+      toStatus: finalStatus,
       changedBy: reviewerId,
       comment: comment ?? `${stage} decision: ${decision}`,
     });
@@ -707,7 +836,7 @@ router.post(
       }
 
       const request = current.rows[0];
-      if (!["paid", "processing", "ready_for_retrieval", "ready"].includes(request.status)) {
+      if (!["paid", "processing", "ready_for_pickup"].includes(request.status)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
           error: "A request must have verified clearance and confirmed payment before it can be marked ready for pickup.",
@@ -717,14 +846,14 @@ router.post(
       if (["paid", "processing"].includes(request.status)) {
         await client.query(
           `UPDATE requests
-           SET status = 'ready_for_retrieval', updated_at = NOW()
+           SET status = 'ready_for_pickup', updated_at = NOW()
            WHERE id = $1`,
           [id],
         );
         await client.query(
           `INSERT INTO request_status_history
              (request_id, from_status, to_status, changed_by, comment)
-              VALUES ($1, $2, 'ready_for_retrieval', $3, 'Ready for pickup')`,
+              VALUES ($1, $2, 'ready_for_pickup', $3, 'Ready for pickup')`,
              [id, request.status, req.user!.id],
         );
         await client.query(
@@ -754,7 +883,7 @@ router.post(
     );
     return res.json({
       message: "Request marked ready for pickup. The email notification is being sent in the background.",
-      status: "ready_for_retrieval",
+      status: "ready_for_pickup",
       emailNotificationQueued: true,
     });
   },
@@ -778,7 +907,7 @@ router.post(
         return res.status(404).json({ error: "Request not found" });
       }
       const previousStatus = current.rows[0].status as string;
-      if (!["ready_for_retrieval", "ready"].includes(previousStatus)) {
+      if (previousStatus !== "ready_for_pickup") {
         await client.query("ROLLBACK");
         return res.status(409).json({
           error: "Only a request ready for pickup can be marked as collected.",
@@ -1274,22 +1403,19 @@ router.post(
            SELECT id, status AS previous_status
            FROM requests
            WHERE requester_id = $1
-             AND status NOT IN (
-               'saso_review', 'fulfilled', 'rejected', 'cancelled',
-               'registrar_rejected', 'saso_rejected'
-             )
+             AND status NOT IN ('clearance_review', 'fulfilled', 'rejected')
          ),
          updated_requests AS (
            UPDATE requests AS request_row
-           SET status = 'saso_review', updated_at = NOW()
+           SET status = 'clearance_review', updated_at = NOW()
            FROM affected_requests
            WHERE request_row.id = affected_requests.id
            RETURNING request_row.id
          )
          INSERT INTO request_status_history
            (request_id, from_status, to_status, changed_by, comment)
-         SELECT updated_requests.id, affected_requests.previous_status,
-                'saso_review', $2, 'Clearance invalidated'
+         SELECT updated_requests.id, affected_requests.previous_status::text,
+                'clearance_review', $2, 'Clearance invalidated'
          FROM updated_requests
          INNER JOIN affected_requests
            ON affected_requests.id = updated_requests.id`,
@@ -1361,33 +1487,35 @@ router.post(
       if (clearance.status === "verified") {
         await client.query(
           `WITH requests_to_restore AS MATERIALIZED (
-             SELECT request_row.id, request_row.status AS previous_status,
-                    COALESCE(
-                      (
-                        SELECT history.from_status
-                        FROM request_status_history AS history
-                        WHERE history.request_id = request_row.id
-                          AND history.to_status = request_row.status
-                          AND history.from_status IS NOT NULL
-                        ORDER BY history.created_at DESC, history.id DESC
-                        LIMIT 1
-                      ),
-                      'submitted'::request_status
-                    ) AS restored_status
-             FROM requests AS request_row
-             WHERE request_row.requester_id = $1
-               AND request_row.status IN ('registrar_approved', 'saso_review')
+              SELECT request_row.id, request_row.status AS previous_status,
+                     CASE COALESCE(previous_history.from_status, 'pending_review')
+                       WHEN 'clearance_review' THEN 'pending_payment'
+                       ELSE COALESCE(previous_history.from_status, 'pending_review')
+                     END AS restored_status
+              FROM requests AS request_row
+              LEFT JOIN LATERAL (
+                SELECT history.from_status
+                FROM request_status_history AS history
+                WHERE history.request_id = request_row.id
+                  AND history.to_status = request_row.status::text
+                  AND history.from_status IS NOT NULL
+                ORDER BY history.created_at DESC, history.id DESC
+                LIMIT 1
+              ) AS previous_history ON TRUE
+              WHERE request_row.requester_id = $1
+                AND request_row.status = 'clearance_review'
            ),
            updated_requests AS (
              UPDATE requests AS request_row
-             SET status = requests_to_restore.restored_status, updated_at = NOW()
+             SET status = requests_to_restore.restored_status::public.request_status,
+                 updated_at = NOW()
              FROM requests_to_restore
              WHERE request_row.id = requests_to_restore.id
              RETURNING request_row.id
            )
            INSERT INTO request_status_history
              (request_id, from_status, to_status, changed_by, comment)
-           SELECT updated_requests.id, requests_to_restore.previous_status,
+           SELECT updated_requests.id, requests_to_restore.previous_status::text,
                   requests_to_restore.restored_status, $2,
                   'Clearance verified; restored previous request status'
            FROM updated_requests
@@ -1473,11 +1601,28 @@ router.post(
         });
       }
 
+      await client.query(
+        "SELECT id FROM users WHERE id = $1 FOR UPDATE",
+        [student.rows[0].id],
+      );
+      const concurrentRequests = await client.query<{ count: number }>(
+        `SELECT COUNT(*)::int AS count
+         FROM requests
+         WHERE requester_id = $1 AND status <> 'fulfilled'`,
+        [student.rows[0].id],
+      );
+      if (concurrentRequests.rows[0].count >= 5) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "This student already has 5 concurrent requests. Fulfilled requests do not count toward this limit.",
+        });
+      }
+
       const inserted = await client.query(
         `INSERT INTO requests
            (requester_id, document_type_id, status, purpose, additional_details,
             fee_amount, fee_currency)
-         SELECT $1, document.id, 'submitted', $2, $3::jsonb,
+         SELECT $1, document.id, 'pending_review', $2, $3::jsonb,
                 document.base_fee * $4, document.currency
          FROM document_types AS document
          WHERE document.id = $5 AND document.active = TRUE
@@ -1503,7 +1648,7 @@ router.post(
       await client.query(
         `INSERT INTO request_status_history
            (request_id, from_status, to_status, changed_by, comment)
-         VALUES ($1, NULL, 'submitted', $2, 'Walk-in request entered by Registrar')`,
+         VALUES ($1, NULL, 'pending_review', $2, 'Walk-in request entered by Registrar')`,
         [request.id, req.user!.id],
       );
       await client.query("COMMIT");
@@ -1528,9 +1673,9 @@ router.post(
 
       await client.query("BEGIN");
       const result = await client.query(
-        `SELECT id, status
-         FROM requests
-         WHERE id = $1 AND requester_id = $2
+        `SELECT request_row.id, request_row.status, request_row.additional_details
+         FROM requests AS request_row
+         WHERE request_row.id = $1 AND request_row.requester_id = $2
          FOR UPDATE OF request_row`,
         [id, req.user!.id],
       );
@@ -1541,7 +1686,13 @@ router.post(
         return;
       }
 
-      if (result.rows[0].status !== "awaiting_payment") {
+      const paymentDetails = result.rows[0].additional_details ?? {};
+      const hasPaymentProof = Boolean(
+        paymentDetails.receiptUrl ??
+          paymentDetails.receipt_url ??
+          paymentDetails.proof_of_payment,
+      );
+      if (result.rows[0].status !== "pending_payment" || hasPaymentProof) {
         await client.query("ROLLBACK");
         res.status(409).json({
           error: "Payment method can only be changed before payment proof is submitted",
@@ -1599,7 +1750,7 @@ router.post(
       }
 
       const request = result.rows[0];
-      if (!["approved", "awaiting_payment", "payment_review"].includes(request.status)) {
+      if (request.status !== "pending_payment") {
         await client.query("ROLLBACK");
         res.status(409).json({
           error: `Payment proof cannot be submitted while request status is ${request.status}`,
@@ -1626,7 +1777,7 @@ router.post(
       }
 
       const uploadedAt = new Date().toISOString();
-      const nextStatus = "payment_review";
+      const nextStatus = "pending_payment";
       await client.query(
         `UPDATE requests
          SET status = $1,
@@ -1714,7 +1865,7 @@ router.post(
       }
 
       const request = result.rows[0];
-      if (!["approved", "awaiting_payment", "payment_review"].includes(request.status)) {
+      if (request.status !== "pending_payment") {
         await client.query("ROLLBACK");
         res.status(409).json({
           error: `Payment cannot be recorded while request status is ${request.status}`,
@@ -1763,11 +1914,7 @@ router.post(
       }
 
       const nextStatus =
-        input.status === "succeeded"
-          ? "paid"
-          : input.status === "pending"
-            ? "payment_review"
-            : "awaiting_payment";
+        input.status === "succeeded" ? "paid" : "pending_payment";
       const emailNotification =
         input.status === "succeeded"
           ? {
