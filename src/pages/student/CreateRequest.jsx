@@ -236,28 +236,13 @@ function CreateRequest({ embedded = false, onRequestCreated, clearanceState }) {
         {/* Collection & Payment Methods */}
         <div className="form-row">
           <div className="form-group half-width">
-            <label htmlFor="collectionMethod">Collection Method</label>
-            <select
-              id="collectionMethod"
-              name="collectionMethod"
-              value={formData.collectionMethod}
-              onChange={handleChange}
-            >
-              <option value="Pick-up">Pick-up at Registrar's Office</option>
-              <option value="Delivery">Delivery (Additional Fee)</option>
-            </select>
+            <label>Collection Method</label>
+            <p>Pick-up at Registrar&apos;s Office</p>
           </div>
 
           <div className="form-group half-width">
-            <label htmlFor="paymentMethod">Payment Method</label>
-            <select
-              id="paymentMethod"
-              name="paymentMethod"
-              value={formData.paymentMethod}
-              onChange={handleChange}
-            >
-              <option value="Pay at the Office">Cash at the Finance Office</option>
-            </select>
+            <label>Payment Method</label>
+            <p>Cash at the Finance Office</p>
           </div>
         </div>
 

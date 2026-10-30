@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ClearanceService } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
+import { useServerEvents } from './useServerEvents';
 
 export function useStudentClearance({ enabled = true } = {}) {
   const [clearance, setClearance] = useState(null);
@@ -9,21 +10,27 @@ export function useStudentClearance({ enabled = true } = {}) {
   const [isDeleting, setIsDeleting] = useState(false);
   const { addToast } = useToast();
 
-  const refreshClearance = useCallback(async () => {
-    setIsLoading(true);
+  const refreshClearance = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     try {
       setClearance(await ClearanceService.getMine());
     } catch (error) {
       addToast(error.message || 'Failed to load clearance status.', 'error');
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   }, [addToast]);
 
+  const refreshClearanceFromServer = useCallback(
+    () => refreshClearance(false),
+    [refreshClearance],
+  );
+  useServerEvents('clearances', refreshClearanceFromServer, enabled);
+
   useEffect(() => {
     if (!enabled) return undefined;
-    refreshClearance();
-    return undefined;
+    const timeoutId = window.setTimeout(refreshClearance, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [enabled, refreshClearance]);
 
   const submitClearance = useCallback(async (file) => {

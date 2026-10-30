@@ -272,7 +272,7 @@
 }
 
 .student-records-page #student-clearance-invalidation-reason {
-  resize: vertical;
+  resize: none;
   min-height: 6rem;
 }
 

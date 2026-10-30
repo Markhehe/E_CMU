@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { DocumentService } from '../../services/api';
 import { formatDate } from '../../utils/formatters';
 import Modal from './Modal';
 
-function RequestCommentsModal({ isOpen, onClose, request, onCommentsRead }) {
+function RequestCommentsModal({
+  isOpen,
+  onClose,
+  request,
+  onCommentsRead,
+  focusCommentId,
+}) {
   const { currentUser } = useAuth();
   const { addToast } = useToast();
   const [comments, setComments] = useState([]);
@@ -15,6 +21,7 @@ function RequestCommentsModal({ isOpen, onClose, request, onCommentsRead }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeletingComment, setIsDeletingComment] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState(null);
+  const commentLimitNotified = useRef(false);
   const isStaff = currentUser?.rawRoles?.some((role) =>
     String(role).toLowerCase() === 'registrar'
   );
@@ -23,32 +30,47 @@ function RequestCommentsModal({ isOpen, onClose, request, onCommentsRead }) {
     if (!isOpen || !request) return undefined;
 
     let active = true;
-    setIsLoading(true);
-    const loadComments = async () => {
-      try {
-        const items = await DocumentService.getRequestComments(request.id);
-        if (!active) return;
-        setComments(items);
+    const timeoutId = window.setTimeout(() => {
+      if (!active) return;
+      setIsLoading(true);
+      const loadComments = async () => {
         try {
-          await onCommentsRead(request.id);
+          const items = await DocumentService.getRequestComments(request.id);
+          if (!active) return;
+          setComments(items);
+          try {
+            await onCommentsRead(request.id);
+          } catch (error) {
+            addToast(error.message || 'Could not mark request comments as read.', 'error');
+          }
         } catch (error) {
-          addToast(error.message || 'Could not mark request comments as read.', 'error');
+          if (active) {
+            setComments([]);
+            addToast(error.message || 'Could not load request comments.', 'error');
+          }
+        } finally {
+          if (active) setIsLoading(false);
         }
-      } catch (error) {
-        if (active) {
-          setComments([]);
-          addToast(error.message || 'Could not load request comments.', 'error');
-        }
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    };
-    loadComments();
+      };
+      loadComments();
+    }, 0);
 
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
     };
   }, [isOpen, request, onCommentsRead, addToast]);
+
+  useEffect(() => {
+    if (!isOpen || isLoading || !focusCommentId) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      document.getElementById(`request-comment-${focusCommentId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [focusCommentId, isLoading, isOpen, comments]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -104,6 +126,8 @@ function RequestCommentsModal({ isOpen, onClose, request, onCommentsRead }) {
             {comments.map((item) => (
               <article
                 key={item.id}
+                id={`request-comment-${item.id}`}
+                className={String(item.id) === String(focusCommentId) ? 'request-comment-highlight' : undefined}
                 style={{
                   padding: '0.7rem 0.8rem',
                   backgroundColor: item.visibility === 'staff' ? '#fff8e1' : '#f8f9fa',
@@ -176,10 +200,24 @@ function RequestCommentsModal({ isOpen, onClose, request, onCommentsRead }) {
             <textarea
               id="requestComment"
               value={comment}
-              onChange={(event) => setComment(event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value.length > 240) {
+                  if (!commentLimitNotified.current) {
+                    addToast('Comments cannot exceed 240 characters.', 'error');
+                    commentLimitNotified.current = true;
+                  }
+                  setComment(value.slice(0, 240));
+                  return;
+                }
+                commentLimitNotified.current = false;
+                setComment(value);
+              }}
+              onFocus={() => {
+                commentLimitNotified.current = false;
+              }}
               className="auth-input"
               rows={3}
-              maxLength={2000}
               placeholder="Write a comment about this request"
               required
               disabled={isSaving}
