@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useOverlayScrollbars } from 'overlayscrollbars-react';
+import { useServerEvents } from '../../hooks/useServerEvents';
 import { ClearanceService } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import ClearancePreviewModal from '../../components/ui/ClearancePreviewModal';
@@ -8,6 +10,7 @@ import { scrollbarOptions } from '../../utils/scrollbarOptions';
 import '../../styles/dashboard.css';
 
 function RegistrarClearanceDashboard() {
+  const navigate = useNavigate();
   const tableWrapperRef = useRef(null);
   const [initializeScrollbars] = useOverlayScrollbars({
     options: {
@@ -23,6 +26,7 @@ function RegistrarClearanceDashboard() {
   const [verificationDialog, setVerificationDialog] = useState(null);
   const [verificationImageError, setVerificationImageError] = useState(false);
   const [commentDraft, setCommentDraft] = useState('');
+  const commentLimitNotified = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState(null);
   const [invalidatingId, setInvalidatingId] = useState(null);
@@ -34,8 +38,8 @@ function RegistrarClearanceDashboard() {
     if (tableWrapperRef.current) initializeScrollbars(tableWrapperRef.current);
   }, [initializeScrollbars]);
 
-  const loadClearances = useCallback(async () => {
-    setIsLoading(true);
+  const loadClearances = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     try {
       setClearances(
         activeTab === 'archive'
@@ -45,9 +49,12 @@ function RegistrarClearanceDashboard() {
     } catch (error) {
       addToast(error.message || 'Failed to load clearance submissions.', 'error');
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   }, [activeTab, activeArchiveSearch, addToast]);
+
+  const refreshClearances = useCallback(() => loadClearances(false), [loadClearances]);
+  useServerEvents(['clearances', 'requests'], refreshClearances);
 
   useEffect(() => {
     let isCurrent = true;
@@ -136,6 +143,14 @@ function RegistrarClearanceDashboard() {
   const openVerificationDialog = (submission) => {
     setVerificationImageError(false);
     setVerificationDialog(submission);
+  };
+
+  const openStudentRecord = (submission) => {
+    const studentIdentifier = submission.student_id || submission.email;
+    if (!studentIdentifier) return;
+    navigate('/registrar/students', {
+      state: { studentRecordIdentifier: studentIdentifier },
+    });
   };
 
   const confirmVerification = async () => {
@@ -250,11 +265,25 @@ function RegistrarClearanceDashboard() {
             ) : clearances.map((submission) => (
               <tr key={submission.id}>
                 <td>
-                  <strong>{submission.full_name}</strong>
+                  <button
+                    type="button"
+                    className="student-record-link"
+                    onClick={() => openStudentRecord(submission)}
+                  >
+                    <strong>{submission.full_name}</strong>
+                  </button>
                   <br />
                   <span className="doc-meta">{submission.email}</span>
                 </td>
-                <td>{submission.student_id}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="student-record-link"
+                    onClick={() => openStudentRecord(submission)}
+                  >
+                    {submission.student_id || '—'}
+                  </button>
+                </td>
                 <td>{new Date(submission.submitted_at).toLocaleString()}</td>
                 <td>
                   <button
@@ -382,8 +411,22 @@ function RegistrarClearanceDashboard() {
             id="clearance-review-comment"
             className="auth-input clearance-comment-input"
             value={commentDraft}
-            onChange={(event) => setCommentDraft(event.target.value)}
-            maxLength={2000}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value.length > 240) {
+                if (!commentLimitNotified.current) {
+                  addToast('Comments cannot exceed 240 characters.', 'error');
+                  commentLimitNotified.current = true;
+                }
+                setCommentDraft(value.slice(0, 240));
+                return;
+              }
+              commentLimitNotified.current = false;
+              setCommentDraft(value);
+            }}
+            onFocus={() => {
+              commentLimitNotified.current = false;
+            }}
             rows={4}
             required
             disabled={Boolean(reviewingId || invalidatingId)}

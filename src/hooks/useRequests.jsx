@@ -7,6 +7,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DocumentService } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
+import { useServerEvents } from './useServerEvents';
 
 const STATUS_WEIGHTS = {
   'PENDING PAYMENT': 1,
@@ -79,17 +80,14 @@ export function useRequests() {
     }
   }, [addToast]);
 
+  const refreshRequests = useCallback(() => fetchRequests(false), [fetchRequests]);
+
+  useServerEvents(['requests', 'comments'], refreshRequests);
+
   // Initial mount load
   useEffect(() => {
-    let isMounted = true;
-
-    if (isMounted) {
-      fetchRequests(true);
-    }
-
-    return () => {
-      isMounted = false;
-    };
+    const timeoutId = window.setTimeout(() => fetchRequests(true), 0);
+    return () => window.clearTimeout(timeoutId);
   }, [fetchRequests]);
 
   // Registrar clearance verification
@@ -130,6 +128,15 @@ export function useRequests() {
       runWorkflowAction(
         () => DocumentService.submitRegistrarReview(id, decision, comment),
         `Registrar review recorded: ${decision}.`
+      ),
+    [runWorkflowAction]
+  );
+
+  const changeRequestStatus = useCallback(
+    (id, status) =>
+      runWorkflowAction(
+        () => DocumentService.changeRequestStatus(id, status),
+        'Request status updated.'
       ),
     [runWorkflowAction]
   );
@@ -207,8 +214,7 @@ export function useRequests() {
       const matchesFulfilledVisibility = showFulfilledRequests || !isFulfilled;
       const isRejected =
         req.status?.toUpperCase() === 'REJECTED' ||
-        ['REJECTED', 'CANCELLED', 'REGISTRAR_REJECTED', 'SASO_REJECTED']
-          .includes(req.rawStatus?.toUpperCase());
+        req.rawStatus?.toUpperCase() === 'REJECTED';
       const matchesRejectedVisibility = showRejectedRequests || !isRejected;
 
       return matchesSearch && matchesStatus &&
@@ -222,14 +228,6 @@ export function useRequests() {
           return new Date(b.date || 0) - new Date(a.date || 0);
         case 'DATE_ASC':
           return new Date(a.date || 0) - new Date(b.date || 0);
-        case 'ID_ASC':
-          return (a.displayId || a.id).localeCompare(b.displayId || b.id);
-        case 'ID_DESC':
-          return (b.displayId || b.id).localeCompare(a.displayId || a.id);
-        case 'NAME_ASC':
-          return (a.studentName || '').localeCompare(b.studentName || '');
-        case 'NAME_DESC':
-          return (b.studentName || '').localeCompare(a.studentName || '');
         case 'STATUS_ASC':
           return (STATUS_WEIGHTS[a.status] || 99) - (STATUS_WEIGHTS[b.status] || 99);
         case 'STATUS_DESC':
@@ -249,6 +247,7 @@ export function useRequests() {
 
   return {
     requests: processedRequests,
+    allRequests: requests,
     rawCount: requests.length,
     isLoading,
     isRefreshing,
@@ -263,9 +262,10 @@ export function useRequests() {
     setShowRejectedRequests,
     sortOption,
     setSortOption,
-    refreshRequests: () => fetchRequests(false),
+    refreshRequests,
     toggleClearance,
     reviewAsRegistrar,
+    changeRequestStatus,
     confirmPayment,
     startRequestProcessing,
     markReadyForPickup,
