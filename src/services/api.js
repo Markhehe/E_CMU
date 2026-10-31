@@ -4,7 +4,7 @@
  * request formatting, explicit workflow action endpoints, and bidrectional status mapping.
  */
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
 const MAX_RECEIPT_SIZE = 5 * 1024 * 1024;
 
 function readFileAsDataUrl(file) {
@@ -74,28 +74,15 @@ async function apiRequest(path, options = {}) {
 // System Workflow Status Mappings (Backend Status -> Human Readable UI Badge Label)
 export const STATUS_LABELS = {
   pending_review: 'PENDING REVIEW',
-  submitted: 'PENDING REVIEW',
   on_hold: 'ON HOLD',
-  needs_information: 'ON HOLD',
   pending_payment: 'PENDING PAYMENT',
-  registrar_review: 'REGISTRAR REVIEW',
-  needs_information: 'ON HOLD',
-  approved: 'PENDING PAYMENT',
-  registrar_approved: 'CLEARANCE REVIEW',
-  registrar_rejected: 'REJECTED',
-  saso_review: 'CLEARANCE REVIEW',
-  saso_cleared: 'PENDING PAYMENT',
-  saso_rejected: 'REJECTED',
-  awaiting_payment: 'PENDING PAYMENT',
-  payment_review: 'PENDING PAYMENT',
+  clearance_review: 'CLEARANCE REVIEW',
   paid: 'PAID',
   processing: 'PROCESSING',
-  ready_for_pickup: 'READY FOR PICKUP',
-  ready_: 'READY FOR PICKUP',
+  ready: 'READY FOR PICKUP',
   ready_for_retrieval: 'READY FOR PICKUP',
   fulfilled: 'FULFILLED',
   rejected: 'REJECTED',
-  cancelled: 'REJECTED',
 };
 
 /**
@@ -187,6 +174,7 @@ const receiptUrl =
     feeAmount: Number(request.feeAmount ?? request.fee_amount ?? 0),
     feeCurrency: request.feeCurrency || request.fee_currency || 'PHP',
     collectionMethod: additionalDetails.collectionMethod || 'Pickup',
+    commentCount: Number(request.commentCount ?? request.comment_count ?? 0),
     rejectionReason: request.rejectionReason || request.rejection_reason || null,
     hasUnreadComments: Boolean(request.hasUnreadComments ?? request.has_unread_comments),
   };
@@ -306,6 +294,19 @@ export const DocumentService = {
     return apiRequest(`/requests/${encodeURIComponent(requestId)}/registrar-review`, {
       method: 'POST',
       body: JSON.stringify({ decision, comment }),
+    });
+  },
+
+  async changeRequestStatus(requestId, status) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  async deletePendingRequest(requestId) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}`, {
+      method: 'DELETE',
     });
   },
 
@@ -467,6 +468,28 @@ export const ClearanceService = {
     return apiRequest(`/requests/clearances/${encodeURIComponent(id)}/invalidate`, {
       method: 'POST',
       body: JSON.stringify({ comment }),
+    });
+  },
+};
+
+export const NotificationService = {
+  async getMine() {
+    const result = await apiRequest('/requests/notifications');
+    return {
+      notifications: result.notifications || [],
+      unreadCount: Number(result.unreadCount || 0),
+    };
+  },
+
+  async markRead(notificationId) {
+    return apiRequest(`/requests/notifications/${encodeURIComponent(notificationId)}/read`, {
+      method: 'POST',
+    });
+  },
+
+  async markAllRead() {
+    return apiRequest('/requests/notifications/read-all', {
+      method: 'POST',
     });
   },
 };

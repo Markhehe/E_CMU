@@ -112,7 +112,7 @@ function StudentClearancePanel({
   };
 
   return (
-    <section className="card-ui student-clearance-panel" style={{ marginBottom: '1.25rem', padding: '1.25rem' }}>
+    <section id="student-clearance" className="card-ui student-clearance-panel" style={{ marginBottom: '1.25rem', padding: '1.25rem' }}>
       <div className="student-clearance-heading">
         <h2 className="settings-section-title" style={{ marginTop: 0 }}>Student Clearance</h2>
         {canViewReturnedClearance && (

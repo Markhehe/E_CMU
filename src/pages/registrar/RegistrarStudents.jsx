@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useOverlayScrollbars } from 'overlayscrollbars-react';
+import { useServerEvents } from '../../hooks/useServerEvents';
 import { ClearanceService } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import ClearancePreviewModal from '../../components/ui/ClearancePreviewModal';
@@ -15,6 +17,7 @@ function displayStatus(status = '') {
 }
 
 function RegistrarStudents() {
+  const location = useLocation();
   const [query, setQuery] = useState('');
   const [students, setStudents] = useState([]);
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
@@ -25,6 +28,7 @@ function RegistrarStudents() {
   const [previewingClearance, setPreviewingClearance] = useState(null);
   const [clearanceToInvalidate, setClearanceToInvalidate] = useState(null);
   const [invalidationReason, setInvalidationReason] = useState('');
+  const invalidationLimitNotified = useRef(false);
   const [isInvalidating, setIsInvalidating] = useState(false);
   const { addToast } = useToast();
   const latestSearchId = useRef(0);
@@ -103,10 +107,12 @@ function RegistrarStudents() {
     await loadStudents(searchTerm);
   };
 
-  const openStudent = async (studentId) => {
+  const openStudent = useCallback(async (studentId, { showLoading = true } = {}) => {
     const profileId = ++latestProfileId.current;
-    setIsLoadingProfile(true);
-    setSelectedStudent(null);
+    if (showLoading) {
+      setIsLoadingProfile(true);
+      setSelectedStudent(null);
+    }
     try {
       const profile = await ClearanceService.getStudentProfile(studentId);
       if (profileId === latestProfileId.current) setSelectedStudent(profile);
@@ -115,11 +121,25 @@ function RegistrarStudents() {
         addToast(error.message || 'Failed to load student details.', 'error');
       }
     } finally {
-      if (profileId === latestProfileId.current) setIsLoadingProfile(false);
+      if (showLoading && profileId === latestProfileId.current) setIsLoadingProfile(false);
     }
-  };
+  }, [addToast]);
+
+  useEffect(() => {
+    const studentIdentifier = location.state?.studentRecordIdentifier;
+    if (!studentIdentifier) return undefined;
+
+    const timeoutId = window.setTimeout(() => openStudent(studentIdentifier), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [location.key, location.state, openStudent]);
 
   const student = selectedStudent?.student;
+  const refreshSelectedStudent = useCallback(() => {
+    const studentIdentifier = student?.student_id || student?.email;
+    if (studentIdentifier) openStudent(studentIdentifier, { showLoading: false });
+  }, [openStudent, student?.email, student?.student_id]);
+  useServerEvents(['requests', 'clearances'], refreshSelectedStudent, Boolean(student));
+
   const currentClearance = selectedStudent?.clearances.find((clearance) => clearance.is_current);
   const fullName = student
     ? [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(' ')
@@ -175,88 +195,92 @@ function RegistrarStudents() {
         </p>
       </header>
 
-      <form onSubmit={searchStudents} className="table-toolbar student-records-toolbar" role="search">
-        <input
-          type="search"
-          className="toolbar-input"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search name (typos supported), student ID, or email"
-          aria-label="Search students by name with typo tolerance, ID, or university email"
-          minLength={2}
-          maxLength={100}
-          disabled={isSearching}
-        />
-        <button type="submit" className="btn-primary" disabled={isSearching}>
-          {isSearching ? 'Searching...' : 'Search'}
-        </button>
-      </form>
+      {!selectedStudent && !isLoadingProfile && (
+        <>
+          <form onSubmit={searchStudents} className="table-toolbar student-records-toolbar" role="search">
+            <input
+              type="search"
+              className="toolbar-input"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search name (typos supported), student ID, or email"
+              aria-label="Search students by name with typo tolerance, ID, or university email"
+              minLength={2}
+              maxLength={100}
+              disabled={isSearching}
+            />
+            <button type="submit" className="btn-primary" disabled={isSearching}>
+              {isSearching ? 'Searching...' : 'Search'}
+            </button>
+          </form>
 
-      <section className="student-records-section" aria-labelledby="student-list-heading">
-        <div className="student-records-section-heading">
-          <div>
-            <h2 id="student-list-heading" className="settings-section-title">
-              {activeSearchTerm ? 'Search Results' : 'Students'}
-            </h2>
-            <p className="dashboard-subtext">
-              {activeSearchTerm
-                ? `${students.length} ${students.length === 1 ? 'student' : 'students'} found`
-                : 'Showing up to 25 student records'}
-            </p>
-          </div>
-        </div>
-        <div
-          ref={tableWrapperRef}
-          className="request-table-wrapper student-records-table"
-          role="region"
-          aria-label="Student records"
-          aria-busy={isSearching}
-          tabIndex={0}
-        >
-          <table className="request-table">
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Student ID</th>
-                <th>Email</th>
-                <th className="student-records-action-heading">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isSearching ? (
-                <tr><td colSpan={4}>Loading student records...</td></tr>
-              ) : searchError ? (
-                <tr><td colSpan={4} role="alert">{searchError}</td></tr>
-              ) : students.length === 0 ? (
-                <tr>
-                  <td colSpan={4}>
-                    {activeSearchTerm.length >= 2
-                      ? 'No students found matching that name, ID, or email.'
-                      : 'No student records are available.'}
-                  </td>
-                </tr>
-              ) : students.map((result) => (
-                <tr key={result.id}>
-                  <td><strong>{result.full_name}</strong></td>
-                  <td>{result.student_id || '—'}</td>
-                  <td>{result.email}</td>
-                  <td className="student-records-action-cell">
-                    <button
-                      type="button"
-                      className="workflow-step-button workflow-action-button student-records-view-button"
-                      disabled={isLoadingProfile}
-                      onClick={() => openStudent(result.student_id || result.email)}
-                      aria-label={`View ${result.full_name}'s student record`}
-                    >
-                      View record
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+          <section className="student-records-section" aria-labelledby="student-list-heading">
+            <div className="student-records-section-heading">
+              <div>
+                <h2 id="student-list-heading" className="settings-section-title">
+                  {activeSearchTerm ? 'Search Results' : 'Students'}
+                </h2>
+                <p className="dashboard-subtext">
+                  {activeSearchTerm
+                    ? `${students.length} ${students.length === 1 ? 'student' : 'students'} found`
+                    : 'Showing up to 25 student records'}
+                </p>
+              </div>
+            </div>
+            <div
+              ref={tableWrapperRef}
+              className="request-table-wrapper student-records-table"
+              role="region"
+              aria-label="Student records"
+              aria-busy={isSearching}
+              tabIndex={0}
+            >
+              <table className="request-table">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Student ID</th>
+                    <th>Email</th>
+                    <th className="student-records-action-heading">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isSearching ? (
+                    <tr><td colSpan={4}>Loading student records...</td></tr>
+                  ) : searchError ? (
+                    <tr><td colSpan={4} role="alert">{searchError}</td></tr>
+                  ) : students.length === 0 ? (
+                    <tr>
+                      <td colSpan={4}>
+                        {activeSearchTerm.length >= 2
+                          ? 'No students found matching that name, ID, or email.'
+                          : 'No student records are available.'}
+                      </td>
+                    </tr>
+                  ) : students.map((result) => (
+                    <tr key={result.id}>
+                      <td><strong>{result.full_name}</strong></td>
+                      <td>{result.student_id || '—'}</td>
+                      <td>{result.email}</td>
+                      <td className="student-records-action-cell">
+                        <button
+                          type="button"
+                          className="workflow-step-button workflow-action-button student-records-view-button"
+                          disabled={isLoadingProfile}
+                          onClick={() => openStudent(result.student_id || result.email)}
+                          aria-label={`View ${result.full_name}'s student record`}
+                        >
+                          View record
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </>
+      )}
 
       {isLoadingProfile && <p className="student-records-loading" role="status">Loading student record...</p>}
 
@@ -395,8 +419,22 @@ function RegistrarStudents() {
             id="student-clearance-invalidation-reason"
             className="auth-input"
             value={invalidationReason}
-            onChange={(event) => setInvalidationReason(event.target.value)}
-            maxLength={2000}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value.length > 240) {
+                if (!invalidationLimitNotified.current) {
+                  addToast('Comments cannot exceed 240 characters.', 'error');
+                  invalidationLimitNotified.current = true;
+                }
+                setInvalidationReason(value.slice(0, 240));
+                return;
+              }
+              invalidationLimitNotified.current = false;
+              setInvalidationReason(value);
+            }}
+            onFocus={() => {
+              invalidationLimitNotified.current = false;
+            }}
             rows={4}
             required
             disabled={isInvalidating}

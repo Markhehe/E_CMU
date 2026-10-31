@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRequests } from '../../hooks/useRequests';
 import { useActionMenu } from '../../hooks/useActionMenu';
@@ -20,6 +21,8 @@ import CreateRequest from './CreateRequest';
 import '../../styles/dashboard.css';
 
 function Dashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
   const {
     clearance,
@@ -36,10 +39,14 @@ function Dashboard() {
 
   const [paymentRequest, setPaymentRequest] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [requestToDelete, setRequestToDelete] = useState(null);
+  const [isDeletingRequest, setIsDeletingRequest] = useState(false);
   const [viewingRequest, setViewingRequest] = useState(null);
   const [viewingReceiptRequest, setViewingReceiptRequest] = useState(null);
   const [previewingUpload, setPreviewingUpload] = useState(null);
   const [commentingRequest, setCommentingRequest] = useState(null);
+  const [focusCommentId, setFocusCommentId] = useState(null);
+  const [notificationDetails, setNotificationDetails] = useState(null);
   const [isCreateRequestOpen, setIsCreateRequestOpen] = useState(false);
   const [isClearanceModalOpen, setIsClearanceModalOpen] = useState(false);
   const [selectedClearanceFile, setSelectedClearanceFile] = useState(null);
@@ -135,7 +142,58 @@ function Dashboard() {
     setRequestCopyPreviewUrl(null);
   };
 
-  const studentRequests = requests.filter(req => req.requesterId === currentUser?.id);
+  const studentRequests = useMemo(
+    () => requests.filter((req) => req.requesterId === currentUser?.id),
+    [currentUser?.id, requests],
+  );
+
+  useEffect(() => {
+    if (location.hash !== '#student-clearance') return undefined;
+    const timeoutId = window.setTimeout(() => {
+      document.getElementById('student-clearance')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [location.hash]);
+
+  useEffect(() => {
+    const notification = location.state?.notification;
+    if (!notification || isLoading) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setViewingRequest(null);
+      setCommentingRequest(null);
+      setNotificationDetails(null);
+      setViewingReceiptRequest(null);
+      setPreviewingUpload(null);
+      setPaymentRequest(null);
+      setIsCreateRequestOpen(false);
+      setIsClearanceModalOpen(false);
+
+      const request = studentRequests.find(
+        (item) => item.id === String(notification.requestId),
+      );
+      if (notification.type.startsWith('clearance_') || notification.type === 'request_declined') {
+        setNotificationDetails(notification);
+      } else if (request) {
+        if (notification.type === 'request_comment') {
+          setFocusCommentId(notification.commentId);
+          setCommentingRequest(request);
+        } else {
+          setViewingRequest(request);
+        }
+      } else {
+        addToast('The request linked to this notification is no longer available.', 'info');
+      }
+      navigate(
+        { pathname: location.pathname, hash: location.hash },
+        { replace: true, state: null },
+      );
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [addToast, isLoading, location.hash, location.pathname, location.state, navigate, studentRequests]);
 
   const {
     mode,
@@ -149,6 +207,22 @@ function Dashboard() {
   } = useRequestDisplay(studentRequests, 'student', 5, 'pagination');
 
   const activeMenuRequest = studentRequests.find(req => req.id === openMenuId);
+
+  const handleDeletePendingRequest = async () => {
+    if (!requestToDelete || isDeletingRequest) return;
+
+    setIsDeletingRequest(true);
+    try {
+      await DocumentService.deletePendingRequest(requestToDelete.id);
+      await refreshRequests();
+      setRequestToDelete(null);
+      addToast('Request deleted.', 'success');
+    } catch (error) {
+      addToast(error.message || 'Failed to delete the request.', 'error');
+    } finally {
+      setIsDeletingRequest(false);
+    }
+  };
 
   const handleCreateRequestClick = () => {
     if (!hasVerifiedClearance) {
@@ -305,14 +379,14 @@ function Dashboard() {
                   <td className="col-status-cell" style={{ textAlign: 'center' }}>
                     <div className="status-stack" style={{ alignItems: 'center', justifyContent: 'center' }}>
                       <StatusBadge status={req.status} />
-                      {req.rawStatus === 'payment_review' && (
+                      {req.rawStatus === 'pending_payment' && req.hasReceipt && (
                         <span className="status-alert">Receipt submitted - awaiting Registrar</span>
                       )}
                     </div>
                   </td>
                   <td className="actions-cell">
                     <div className="workflow-inline-actions">
-                      {['approved', 'awaiting_payment', 'payment_review'].includes(req.rawStatus) && !req.hasReceipt ? (
+                      {req.rawStatus === 'pending_payment' && !req.hasReceipt ? (
                           <button
                             type="button"
                             className="workflow-step-button is-payment-action"
@@ -327,13 +401,19 @@ function Dashboard() {
                       <button
                         type="button"
                         className={`workflow-step-button workflow-action-button${req.hasUnreadComments ? ' has-unread-comments' : ''}`}
-                        aria-label={req.hasUnreadComments ? 'Comments, unread comments' : 'Comments'}
+                        aria-label={`Comments, ${req.commentCount} ${req.commentCount === 1 ? 'comment' : 'comments'}${req.hasUnreadComments ? ', unread comments' : ''}`}
                         onClick={(event) => {
                           event.stopPropagation();
                           setCommentingRequest(req);
                         }}
                       >
                         Comments
+                        <span
+                          className="request-comment-count"
+                          aria-hidden="true"
+                        >
+                          {req.commentCount}
+                        </span>
                       </button>
                       <button
                         type="button"
@@ -375,8 +455,54 @@ function Dashboard() {
               setOpenMenuId(null);
             }}>View Uploaded Receipt</button>
           )}
+          {activeMenuRequest.rawStatus === 'pending_review' && (
+            <button
+              type="button"
+              className="text-danger"
+              onClick={() => {
+                setRequestToDelete(activeMenuRequest);
+                setOpenMenuId(null);
+              }}
+            >
+              Delete request
+            </button>
+          )}
         </div>
       )}
+
+      <Modal
+        isOpen={Boolean(requestToDelete)}
+        onClose={() => {
+          if (!isDeletingRequest) setRequestToDelete(null);
+        }}
+        title="Delete request?"
+      >
+        {requestToDelete && (
+          <>
+            <p className="modal-text">
+              Delete request <strong>{requestToDelete.displayId}</strong>? This action cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setRequestToDelete(null)}
+                disabled={isDeletingRequest}
+              >
+                Keep request
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleDeletePendingRequest}
+                disabled={isDeletingRequest}
+              >
+                {isDeletingRequest ? 'Deleting...' : 'Delete request'}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
 
       {/* 5. Request Details Modal */}
       <RequestDetailsModal
@@ -415,11 +541,44 @@ function Dashboard() {
       {commentingRequest && (
         <RequestCommentsModal
           isOpen
-          onClose={() => setCommentingRequest(null)}
+          onClose={() => {
+            setCommentingRequest(null);
+            setFocusCommentId(null);
+          }}
           request={commentingRequest}
           onCommentsRead={markCommentsRead}
+          focusCommentId={focusCommentId}
         />
       )}
+      <Modal
+        isOpen={Boolean(notificationDetails)}
+        onClose={() => setNotificationDetails(null)}
+        title={notificationDetails?.title || 'Notification details'}
+        maxWidth="520px"
+      >
+        {notificationDetails && (
+          <div className="student-notification-details">
+            <p>{notificationDetails.message}</p>
+            {notificationDetails.type.startsWith('clearance_') && (
+              <button
+                type="button"
+                className="workflow-step-button workflow-action-button"
+                onClick={() => {
+                  setNotificationDetails(null);
+                  window.setTimeout(() => {
+                    document.getElementById('student-clearance')?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'start',
+                    });
+                  }, 0);
+                }}
+              >
+                View clearance status
+              </button>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <Modal
         isOpen={isClearanceModalOpen}

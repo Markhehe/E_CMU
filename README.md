@@ -77,6 +77,8 @@ Students can add contact phone and address information in Settings.
 Students must submit a clearance copy and wait for Registrar verification before
 creating an online request or having staff enter a walk-in request. The Registrar
 confirms submitted requests, then the student pays cash at the Finance Office.
+Students may have up to five concurrent requests; fulfilled requests do not
+count toward this limit.
 Online payments are not accepted. Students may upload a picture of the printed
 request showing its tracking code and a picture of the receipt (PNG, JPEG, or
 WebP, up to 2.5 MB each), or show the physical receipt directly to the
@@ -85,6 +87,12 @@ the request ready for pickup, and records pickup as completion. Completed
 requests are removed from the Registrar's active queue and remain visible in
 the student's dashboard history. Walk-in requests entered by Registrar staff
 use the same request and status flow.
+
+Request records use one canonical status per Registrar filter category:
+pending review, on hold, pending payment, clearance review, paid, processing,
+ready for pickup, fulfilled, and rejected. Migration 017 maps existing request
+statuses and status-history entries to these categories without deleting the
+audit history.
 
 Configure SMTP settings above for account-confirmation, comment, payment
 confirmation, and pickup emails; failed deliveries are logged by the API.

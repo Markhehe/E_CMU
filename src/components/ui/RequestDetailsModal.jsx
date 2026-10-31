@@ -17,8 +17,28 @@ function formatCurrency(amount, currency = 'PHP') {
   }).format(amount);
 }
 
-const RequestDetailsModal = ({ isOpen, onClose, request }) => {
+const RequestDetailsModal = ({ isOpen, onClose, request, onOpenStudent }) => {
   if (!request) return null;
+
+  const studentIdentifier =
+    request.studentId && request.studentId !== 'N/A'
+      ? request.studentId
+      : request.studentEmail;
+
+  const renderStudentLink = (value) => (
+    studentIdentifier && onOpenStudent ? (
+      <button
+        type="button"
+        className="student-record-link"
+        style={valueStyle}
+        onClick={() => onOpenStudent(studentIdentifier)}
+      >
+        {value}
+      </button>
+    ) : (
+      <span style={valueStyle}>{value}</span>
+    )
+  );
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Request Details" maxWidth="520px">
@@ -32,12 +52,12 @@ const RequestDetailsModal = ({ isOpen, onClose, request }) => {
 
         <div className="detail-row" style={rowStyle}>
           <span style={labelStyle}>Student Name</span>
-          <span style={valueStyle}>{request.studentName || 'N/A'}</span>
+          {renderStudentLink(request.studentName || 'N/A')}
         </div>
 
         <div className="detail-row" style={rowStyle}>
           <span style={labelStyle}>Student ID</span>
-          <span style={valueStyle}>{request.studentId || 'Not available'}</span>
+          {renderStudentLink(request.studentId || 'Not available')}
         </div>
 
         {request.studentEmail && (

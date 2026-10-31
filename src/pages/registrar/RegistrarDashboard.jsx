@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useRequests } from '../../hooks/useRequests';
 import { useActionMenu } from '../../hooks/useActionMenu';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -15,14 +16,40 @@ import { useRequestDisplay } from '../../hooks/useRequestDisplay';
 import WalkInRequestModal from './WalkInRequestModal';
 import '../../styles/dashboard.css';
 
+const REQUEST_STATUS_SUMMARY = [
+  { status: 'PENDING REVIEW', label: 'Pending review' },
+  { status: 'PENDING PAYMENT', label: 'Pending payment' },
+  { status: 'PAID', label: 'Paid' },
+  { status: 'PROCESSING', label: 'Processing' },
+  { status: 'READY FOR PICKUP', label: 'For pickup' },
+  { status: 'ON HOLD', label: 'On hold' },
+];
+
+const DIRECT_STATUS_OPTIONS = [
+  { value: 'pending_review', label: 'Pending review' },
+  { value: 'pending_payment', label: 'Pending payment' },
+  { value: 'paid', label: 'Paid' },
+  { value: 'processing', label: 'Processing' },
+  { value: 'ready_for_pickup', label: 'For pickup' },
+  { value: 'on_hold', label: 'On hold' },
+  { value: 'clearance_review', label: 'Clearance review' },
+  { value: 'fulfilled', label: 'Fulfilled' },
+  { value: 'rejected', label: 'Rejected' },
+];
+
 function RegistrarDashboard() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const appliedNotificationFilterKey = useRef(null);
   const {
     requests,
+    allRequests,
     isLoading,
     searchTerm,
     setSearchTerm,
     statusFilter,
     setStatusFilter,
+    changeRequestStatus,
     showFulfilledRequests,
     setShowFulfilledRequests,
     showRejectedRequests,
@@ -38,11 +65,23 @@ function RegistrarDashboard() {
     refreshRequests,
   } = useRequests();
 
+  const requestStatusCounts = useMemo(() => {
+    const counts = Object.fromEntries(REQUEST_STATUS_SUMMARY.map(({ status }) => [status, 0]));
+    allRequests.forEach((request) => {
+      const status = request.status?.toUpperCase();
+      if (Object.hasOwn(counts, status)) counts[status] += 1;
+    });
+    return counts;
+  }, [allRequests]);
+
   const { openMenuId, setOpenMenuId, menuCoords, toggleMenu } = useActionMenu();
   const [viewingRequest, setViewingRequest] = useState(null);
   const [viewingReceiptRequest, setViewingReceiptRequest] = useState(null);
   const [commentingRequest, setCommentingRequest] = useState(null);
   const [requestToDiscard, setRequestToDiscard] = useState(null);
+  const [requestToChangeStatus, setRequestToChangeStatus] = useState(null);
+  const [selectedNextStatus, setSelectedNextStatus] = useState('');
+  const [isChangingStatus, setIsChangingStatus] = useState(false);
   const [paymentConfirmationRequest, setPaymentConfirmationRequest] = useState(null);
   const [paymentProofSource, setPaymentProofSource] = useState('physical');
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
@@ -54,6 +93,17 @@ function RegistrarDashboard() {
   useEffect(() => {
     setSearchTerm(debouncedSearch);
   }, [debouncedSearch, setSearchTerm]);
+
+  useEffect(() => {
+    const requestedFilter = location.state?.registrarStatusFilter;
+    if (
+      (requestedFilter === 'PENDING REVIEW' || requestedFilter === 'PENDING PAYMENT')
+      && appliedNotificationFilterKey.current !== location.key
+    ) {
+      appliedNotificationFilterKey.current = location.key;
+      setStatusFilter(requestedFilter);
+    }
+  }, [location.key, location.state, setStatusFilter]);
 
   const activeMenuRequest = requests.find((req) => req.id === openMenuId);
 
@@ -123,21 +173,69 @@ function RegistrarDashboard() {
     setOpenMenuId(null);
   };
 
+  const openStudentRecord = (studentIdentifier) => {
+    setViewingRequest(null);
+    navigate('/registrar/students', {
+      state: { studentRecordIdentifier: studentIdentifier },
+    });
+  };
+
+  const openChangeStatus = (request) => {
+    setRequestToChangeStatus(request);
+    setSelectedNextStatus(request.rawStatus);
+    setOpenMenuId(null);
+  };
+
+  const handleChangeStatus = async (event) => {
+    event.preventDefault();
+    if (!requestToChangeStatus || !selectedNextStatus || isChangingStatus) return;
+
+    setIsChangingStatus(true);
+    try {
+      const result = await changeRequestStatus(requestToChangeStatus.id, selectedNextStatus);
+      if (result) setRequestToChangeStatus(null);
+    } finally {
+      setIsChangingStatus(false);
+    }
+  };
+
   return (
     <div className="dashboard-page registrar-dashboard-page">
       {/* 1. Clean Title Header */}
-      <header className="dashboard-header">
-        <h1 className="dashboard-title">Registrar Control Panel</h1>
-        <p className="dashboard-subtext">
-          Manage and process incoming student document requests.
-        </p>
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={() => setIsWalkInModalOpen(true)}
+      <header className="dashboard-header registrar-dashboard-header">
+        <div className="registrar-header-content">
+          <h1 className="dashboard-title">Registrar Control Panel</h1>
+          <p className="dashboard-subtext">
+            Manage and process incoming student document requests.
+          </p>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => setIsWalkInModalOpen(true)}
+          >
+            Enter Walk-in Request
+          </button>
+        </div>
+        <section
+          className="registrar-request-summary"
+          aria-label="Request counts by status"
+          aria-busy={isLoading}
         >
-          Enter Walk-in Request
-        </button>
+          {REQUEST_STATUS_SUMMARY.map(({ status, label }) => (
+            <button
+              type="button"
+              className={`registrar-request-summary-item${statusFilter === status ? ' is-active' : ''}`}
+              key={status}
+              aria-pressed={statusFilter === status}
+              onClick={() => setStatusFilter(status)}
+            >
+              <span className="registrar-request-summary-count">
+                {isLoading ? '—' : requestStatusCounts[status]}
+              </span>
+              <span className="registrar-request-summary-label">{label}</span>
+            </button>
+          ))}
+        </section>
       </header>
 
       {/* 2. Dedicated Table Toolbar */}
@@ -173,17 +271,16 @@ function RegistrarDashboard() {
           </label>
           <select
             value={sortOption}
-            onChange={(e) => setSortOption(e.target.value)}
+            onChange={(e) => {
+              const nextSortOption = e.target.value;
+              setSortOption(nextSortOption);
+              if (nextSortOption === 'STATUS_ASC') setStatusFilter('ALL');
+            }}
             className="toolbar-select"
           >
             <option value="DATE_DESC">Sort: Date (Newest)</option>
             <option value="DATE_ASC">Sort: Date (Oldest)</option>
-            <option value="ID_ASC">Sort: ID (Ascending)</option>
-            <option value="ID_DESC">Sort: ID (Descending)</option>
-            <option value="NAME_ASC">Sort: Name (A-Z)</option>
-            <option value="NAME_DESC">Sort: Name (Z-A)</option>
             <option value="STATUS_ASC">Sort: Status (Action Needed)</option>
-            <option value="STATUS_DESC">Sort: Status (Fulfilled First)</option>
           </select>
 
           <select
@@ -193,13 +290,12 @@ function RegistrarDashboard() {
           >
             <option value="ALL">Filter: All Statuses</option>
             <option value="PENDING REVIEW">Filter: Pending review</option>
-            <option value="REGISTRAR REVIEW">Filter: Registrar review</option>
-            <option value="ON HOLD">Filter: On hold</option>
-            <option value="CLEARANCE REVIEW">Filter: Awaiting clearance verification</option>
             <option value="PENDING PAYMENT">Filter: Pending payment</option>
             <option value="PAID">Filter: Paid</option>
             <option value="PROCESSING">Filter: Processing</option>
-            <option value="READY FOR PICKUP">Filter: Ready</option>
+            <option value="READY FOR PICKUP">Filter: For pickup</option>
+            <option value="ON HOLD">Filter: On hold</option>
+            <option value="CLEARANCE REVIEW">Filter: Clearance review</option>
             <option value="FULFILLED">Filter: Fulfilled</option>
             <option value="REJECTED">Filter: Rejected</option>
           </select>
@@ -262,9 +358,33 @@ function RegistrarDashboard() {
                     <span className="doc-name">{req.displayId || req.id}</span>
                   </td>
                   <td>
-                    <strong style={{ color: '#212529' }}>{req.studentName}</strong>
+                    <button
+                      type="button"
+                      className="student-record-link"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        const identifier = req.studentId && req.studentId !== 'N/A'
+                          ? req.studentId
+                          : req.studentEmail;
+                        if (identifier) openStudentRecord(identifier);
+                      }}
+                    >
+                      <strong style={{ color: '#212529' }}>{req.studentName}</strong>
+                    </button>
                     <br />
-                    <span className="doc-meta">{req.studentId || 'N/A'}</span>
+                    <button
+                      type="button"
+                      className="student-record-link doc-meta"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        const identifier = req.studentId && req.studentId !== 'N/A'
+                          ? req.studentId
+                          : req.studentEmail;
+                        if (identifier) openStudentRecord(identifier);
+                      }}
+                    >
+                      {req.studentId || 'N/A'}
+                    </button>
                   </td>
                   <td className="doc-name-cell" title={req.docType}>
                     <span style={{ color: '#495057', fontWeight: '500' }}>{req.docType}</span>
@@ -291,7 +411,7 @@ function RegistrarDashboard() {
                       >
                         Comments
                       </button>
-                      {['submitted', 'pending_review','on_hold', 'registrar_review', 'needs_information'].includes(req.rawStatus) && (
+                      {['pending_review', 'on_hold'].includes(req.rawStatus) && (
                         <button
                           type="button"
                           className="workflow-step-button is-positive"
@@ -300,15 +420,20 @@ function RegistrarDashboard() {
                             event.stopPropagation();
                             handleRegistrarReview(req.id, 'approved');
                           }}
-                          title="Approve this request for clearance verification"
+                          title="Approve this request for payment"
                         >
                           Approve
                         </button>
                       )}
-                      {['approved', 'awaiting_payment', 'payment_review'].includes(req.rawStatus) && (
+                      {req.rawStatus === 'pending_payment' && (
                         <button
                           type="button"
                           className="workflow-step-button is-positive"
+                          aria-label={
+                            req.receiptUrl && req.requestCopyUrl
+                              ? 'Confirm cash receipt, website payment proof uploaded'
+                              : 'Confirm cash receipt'
+                          }
                           data-action-cooldown="protected"
                           onClick={(event) => {
                             event.stopPropagation();
@@ -316,6 +441,9 @@ function RegistrarDashboard() {
                           }}
                         >
                           Confirm cash receipt
+                          {req.receiptUrl && req.requestCopyUrl && (
+                            <span className="website-payment-proof-dot" aria-hidden="true" />
+                          )}
                         </button>
                       )}
                       {req.rawStatus === 'paid' && (
@@ -344,7 +472,7 @@ function RegistrarDashboard() {
                           Ready for pickup
                         </button>
                       )}
-                      {['ready_for_retrieval', 'ready', 'ready_for_pickup'].includes(req.rawStatus) && (
+                      {['ready_for_retrieval', 'ready'].includes(req.rawStatus) && (
                         <button
                           type="button"
                           className="workflow-step-button is-positive"
@@ -401,6 +529,9 @@ function RegistrarDashboard() {
           <button type="button" onClick={() => handleViewDetails(activeMenuRequest)}>
             View Details
           </button>
+          <button type="button" onClick={() => openChangeStatus(activeMenuRequest)}>
+            Change status
+          </button>
           {activeMenuRequest.receiptUrl && (
             <button
               type="button"
@@ -413,18 +544,13 @@ function RegistrarDashboard() {
             </button>
           )}
           {[
-            'submitted',
-            'registrar_review',
-            'needs_information',
-            'registrar_approved',
-            'saso_review',
-            'saso_cleared',
-            'awaiting_payment',
-            'payment_review',
+            'pending_review',
+            'on_hold',
+            'pending_payment',
+            'clearance_review',
             'paid',
             'processing',
-            'ready_for_retrieval',
-            'ready',
+            'ready_for_pickup',
           ].includes(activeMenuRequest.rawStatus) && (
             <>
               <div className="actions-menu-divider" />
@@ -448,7 +574,7 @@ function RegistrarDashboard() {
               </button>
             </>
           )}
-          {['ready_for_retrieval', 'ready'].includes(activeMenuRequest.rawStatus) && (
+          {activeMenuRequest.rawStatus === 'ready_for_pickup' && (
             <>
               <div className="actions-menu-divider" />
               <button
@@ -468,7 +594,60 @@ function RegistrarDashboard() {
         isOpen={!!viewingRequest}
         onClose={() => setViewingRequest(null)}
         request={viewingRequest}
+        onOpenStudent={openStudentRecord}
       />
+      <Modal
+        isOpen={Boolean(requestToChangeStatus)}
+        onClose={() => {
+          if (!isChangingStatus) setRequestToChangeStatus(null);
+        }}
+        title="Change request status"
+      >
+        {requestToChangeStatus && (
+          <form className="auth-form" onSubmit={handleChangeStatus}>
+            <p>
+              Change status for request{' '}
+              <strong>{requestToChangeStatus.displayId || requestToChangeStatus.id}</strong>.
+            </p>
+            <p className="doc-meta">
+              This directly changes the request status and records it in the status history. It does not record a payment or send a pickup email.
+            </p>
+            <label className="auth-label" htmlFor="request-status-selection">
+              New status
+            </label>
+            <select
+              id="request-status-selection"
+              className="auth-input"
+              value={selectedNextStatus}
+              onChange={(event) => setSelectedNextStatus(event.target.value)}
+              disabled={isChangingStatus}
+              required
+            >
+              <option value="" disabled>Select a status</option>
+              {DIRECT_STATUS_OPTIONS.map(({ value, label }) => (
+                <option value={value} key={value}>{label}</option>
+              ))}
+            </select>
+            <div className="workflow-inline-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setRequestToChangeStatus(null)}
+                disabled={isChangingStatus}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={isChangingStatus || selectedNextStatus === requestToChangeStatus.rawStatus}
+              >
+                {isChangingStatus ? 'Updating...' : 'Update status'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
       <Modal
         isOpen={Boolean(paymentConfirmationRequest)}
         onClose={() => {
