@@ -73,7 +73,11 @@ async function apiRequest(path, options = {}) {
 
 // System Workflow Status Mappings (Backend Status -> Human Readable UI Badge Label)
 export const STATUS_LABELS = {
+  pending_review: 'PENDING REVIEW',
   submitted: 'PENDING REVIEW',
+  on_hold: 'ON HOLD',
+  needs_information: 'ON HOLD',
+  pending_payment: 'PENDING PAYMENT',
   registrar_review: 'REGISTRAR REVIEW',
   needs_information: 'ON HOLD',
   approved: 'PENDING PAYMENT',
@@ -86,7 +90,8 @@ export const STATUS_LABELS = {
   payment_review: 'PENDING PAYMENT',
   paid: 'PAID',
   processing: 'PROCESSING',
-  ready: 'READY FOR PICKUP',
+  ready_for_pickup: 'READY FOR PICKUP',
+  ready_: 'READY FOR PICKUP',
   ready_for_retrieval: 'READY FOR PICKUP',
   fulfilled: 'FULFILLED',
   rejected: 'REJECTED',

@@ -9,6 +9,7 @@ const statusStyles = {
   'paid': 'status-paid',
   'pending clearance': 'status-pending',
   'processing': 'status-processing',
+  'fulfilled': 'status-success',  
   'ready for pickup': 'status-success',
   'cleared': 'status-success',
   'rejected': 'status-danger',

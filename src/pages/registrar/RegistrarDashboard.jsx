@@ -291,7 +291,7 @@ function RegistrarDashboard() {
                       >
                         Comments
                       </button>
-                      {['submitted', 'registrar_review', 'needs_information'].includes(req.rawStatus) && (
+                      {['submitted', 'pending_review','on_hold', 'registrar_review', 'needs_information'].includes(req.rawStatus) && (
                         <button
                           type="button"
                           className="workflow-step-button is-positive"
@@ -344,7 +344,7 @@ function RegistrarDashboard() {
                           Ready for pickup
                         </button>
                       )}
-                      {['ready_for_retrieval', 'ready'].includes(req.rawStatus) && (
+                      {['ready_for_retrieval', 'ready', 'ready_for_pickup'].includes(req.rawStatus) && (
                         <button
                           type="button"
                           className="workflow-step-button is-positive"
