@@ -1,157 +1,201 @@
+/**
+ * Custom Hook: useRequests
+ * Manages request fetching, sorting, multi-field searching, status filtering,
+ * and server actions with automatic toast notifications.
+ */
+
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { DocumentService } from '../services/api';
-import { useToast } from '../contexts/ToastContext'; 
+import { useToast } from '../contexts/ToastContext';
+import { useServerEvents } from './useServerEvents';
 
-const fallbackStudents = [
-  { studentName: 'Yuan Atanacio', studentId: '2023-0145' },
-  { studentName: 'Maria Santos', studentId: '2022-0891' },
-  { studentName: 'Juan Dela Cruz', studentId: '2021-0332' },
-  { studentName: 'Anna Reyes', studentId: '2024-0112' },
-  { studentName: 'Mark Bautista', studentId: '2020-0554' }
-];
+const STATUS_WEIGHTS = {
+  'PENDING PAYMENT': 1,
+  'PROCESSING': 2,
+  'READY FOR PICKUP': 3,
+  'FULFILLED': 4,
+  'REJECTED': 5,
+};
 
 export function useRequests() {
   const [requests, setRequests] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Initial mount load
+  const [isFetching, setIsFetching] = useState(false); // Background syncs
   const [error, setError] = useState(null);
-  
-  const { addToast } = useToast(); 
+
+  const { addToast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  
-  // NEW: Centralized sorting state
   const [sortOption, setSortOption] = useState('DATE_DESC');
+  const [showFulfilledRequests, setShowFulfilledRequests] = useState(true);
+  const [showRejectedRequests, setShowRejectedRequests] = useState(true);
 
+  // Fetch with explicit options for initial loads vs background syncs
+  const fetchRequests = useCallback(async (options = { background: false }) => {
+    if (!options.background) setIsLoading(true);
+    setIsFetching(true);
+    setError(null);
+
+    try {
+      const data = await DocumentService.getAllRequests();
+      const formattedData = data.map((req) => ({
+        ...req,
+        date: req.dateRequested || req.rawDate || req.date || '',
+      }));
+      setRequests(formattedData);
+    } catch (err) {
+      const msg = err.message || 'Failed to load document requests.';
+      setError(msg);
+      addToast(msg, 'error');
+    } finally {
+      setIsLoading(false);
+      setIsFetching(false);
+    }
+  }, [addToast]);
+
+  const refreshRequests = useCallback(() => fetchRequests({ background: true }), [fetchRequests]);
+
+  useServerEvents(['requests', 'comments'], refreshRequests);
+
+  // Initial mount load
   useEffect(() => {
-    let isMounted = true;
+    const timeoutId = window.setTimeout(() => fetchRequests({ background: false }), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchRequests]);
 
-    const fetchRequests = async () => {
-      setIsLoading(true);
-      setError(null);
-      
+  // --- Workflow Actions ---
+  const toggleClearance = useCallback(
+    async (id, isCleared, notes = '') => {
       try {
-        const data = await DocumentService.getAllRequests();
-        
-        if (isMounted) {
-          const formattedData = data.map((req, index) => ({
-            ...req,
-            studentName: req.studentName || fallbackStudents[index % fallbackStudents.length].studentName,
-            studentId: req.studentId || fallbackStudents[index % fallbackStudents.length].studentId,
-            date: req.dateRequested || req.date
-          }));
-          
-          setRequests(formattedData);
-        }
+        await DocumentService.updateClearance(id, isCleared, notes);
+        addToast(isCleared ? 'Clearance verified.' : 'Clearance requires follow-up.', isCleared ? 'success' : 'error');
+        await refreshRequests();
       } catch (err) {
-        console.error('Error fetching data:', err);
-        if (isMounted) setError('Failed to load requests.');
-      } finally {
-        if (isMounted) setIsLoading(false);
+        addToast(err.message || 'Failed to update clearance.', 'error');
+        throw err;
       }
-    };
+    },
+    [refreshRequests, addToast]
+  );
 
-    fetchRequests();
-    return () => { isMounted = false; };
+  const runWorkflowAction = useCallback(
+    async (action, successMessage) => {
+      try {
+        const result = await action();
+        addToast(result?.message || successMessage, 'success');
+        await refreshRequests();
+        return result;
+      } catch (err) {
+        addToast(err.message || 'Failed to update the request workflow.', 'error');
+        return null;
+      }
+    },
+    [refreshRequests, addToast]
+  );
+
+  const reviewAsRegistrar = useCallback(
+    (id, decision, comment = '') => runWorkflowAction(() => DocumentService.submitRegistrarReview(id, decision, comment), `Registrar review recorded: ${decision}.`),
+    [runWorkflowAction]
+  );
+
+  const changeRequestStatus = useCallback(
+    (id, status) => runWorkflowAction(() => DocumentService.changeRequestStatus(id, status), 'Request status updated.'),
+    [runWorkflowAction]
+  );
+
+  const confirmPayment = useCallback(
+    (id, payment) => runWorkflowAction(() => DocumentService.confirmRequestPayment(id, payment), 'Payment confirmed.'),
+    [runWorkflowAction]
+  );
+
+  const markReadyForPickup = useCallback(
+    (id) => runWorkflowAction(() => DocumentService.markRequestReadyForPickup(id), 'Request marked ready for pickup.'),
+    [runWorkflowAction]
+  );
+
+  const startRequestProcessing = useCallback(
+    (id) => runWorkflowAction(() => DocumentService.startRequestProcessing(id), 'Document processing started.'),
+    [runWorkflowAction]
+  );
+
+  const markPickedUp = useCallback(
+    (id) => runWorkflowAction(() => DocumentService.markRequestPickedUp(id), 'Document pickup recorded.'),
+    [runWorkflowAction]
+  );
+
+  const markCommentsRead = useCallback(async (requestId) => {
+    await DocumentService.markRequestCommentsRead(requestId);
+    setRequests((currentRequests) =>
+      currentRequests.map((req) => (req.id === requestId ? { ...req, hasUnreadComments: false } : req))
+    );
   }, []);
 
-  const updateStatus = useCallback(async (id, newStatus) => {
-    const previousRequests = [...requests];
-
-    setRequests((prev) => 
-      prev.map(req => req.id === id ? { ...req, status: newStatus } : req)
-    );
-
-    try {
-      await DocumentService.updateRequestStatus(id, newStatus);
-      const toastType = newStatus.replace(/\s+/g, '-');
-      addToast(`Request ${id} marked as ${newStatus}.`, toastType);
-      
-    } catch (err) {
-      console.error('Failed to update status on server:', err);
-      setRequests(previousRequests);
-      addToast(`Failed to update ${id}. Server error.`, 'error');
-    }
-  }, [requests, addToast]);
-
-  const toggleClearance = useCallback(async (id, isCleared) => {
-    const previousRequests = [...requests];
-
-    setRequests((prev) => 
-      prev.map(req => req.id === id ? { ...req, sasoCleared: isCleared } : req)
-    );
-
-    try {
-      // API call would go here
-    } catch (err) {
-      console.error('Failed to update clearance:', err);
-      setRequests(previousRequests); 
-      addToast('Failed to update clearance. Server error.', 'error');
-    }
-  }, [requests, addToast]);
-  
-  // UPDATED: Now handles filtering AND sorting
+  // --- Declarative Filter and Sort Pipeline ---
   const processedRequests = useMemo(() => {
-    // 1. First, filter the data
-    const filtered = requests.filter(req => {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = 
-        (req.studentName?.toLowerCase()?.includes(searchLower)) || 
-        (req.id?.toLowerCase()?.includes(searchLower));
-      
-      const matchesStatus = statusFilter === 'ALL' || req.status === statusFilter;
-      
-      return matchesSearch && matchesStatus;
+    const searchLower = searchTerm.trim().toLowerCase();
+
+    const filtered = requests.filter((req) => {
+      const matchesSearch =
+        !searchLower ||
+        req.studentName?.toLowerCase().includes(searchLower) ||
+        req.displayId?.toLowerCase().includes(searchLower) ||
+        req.id?.toLowerCase().includes(searchLower) ||
+        req.docType?.toLowerCase().includes(searchLower) ||
+        req.studentId?.toLowerCase().includes(searchLower) ||
+        req.purpose?.toLowerCase().includes(searchLower);
+
+      const matchesStatus = statusFilter === 'ALL' || 
+                            req.status?.toUpperCase() === statusFilter.toUpperCase() || 
+                            req.rawStatus?.toUpperCase() === statusFilter.toUpperCase();
+
+      const isFulfilled = req.status?.toUpperCase() === 'FULFILLED' || req.rawStatus?.toUpperCase() === 'FULFILLED';
+      const isRejected = req.status?.toUpperCase() === 'REJECTED' || req.rawStatus?.toUpperCase() === 'REJECTED';
+
+      // Declarative visibility logic replaces the messy useRef side-effects.
+      // If the user explicitly filters by FULFILLED, show them regardless of the toggle.
+      const matchesFulfilledVisibility = statusFilter === 'FULFILLED' || showFulfilledRequests || !isFulfilled;
+      const matchesRejectedVisibility = statusFilter === 'REJECTED' || showRejectedRequests || !isRejected;
+
+      return matchesSearch && matchesStatus && matchesFulfilledVisibility && matchesRejectedVisibility;
     });
 
-    // 2. Then, sort the filtered data
-    return filtered.sort((a, b) => {
-      
-      // Define the logical lifecycle of a document (1 happens first, 5 happens last)
-      const statusWeight = {
-        'PENDING PAYMENT': 1,
-        'PROCESSING': 2,
-        'READY FOR PICKUP': 3,
-        'COMPLETED': 4,
-        'REJECTED': 5
-      };
-
+    return [...filtered].sort((a, b) => {
       switch (sortOption) {
-        case 'DATE_DESC':
-          return new Date(b.date) - new Date(a.date);
-        case 'DATE_ASC':
-          return new Date(a.date) - new Date(b.date);
-        case 'ID_ASC':
-          return a.id.localeCompare(b.id);
-        case 'ID_DESC':
-          return b.id.localeCompare(a.id);
-        case 'NAME_ASC':
-          return a.studentName.localeCompare(b.studentName);
-        case 'NAME_DESC':
-          return b.studentName.localeCompare(a.studentName);
-        case 'STATUS_ASC':
-          // Sorts 1 to 5 (Pending -> Completed)
-          return (statusWeight[a.status] || 99) - (statusWeight[b.status] || 99);
-        case 'STATUS_DESC':
-          // Sorts 5 to 1 (Completed -> Pending)
-          return (statusWeight[b.status] || 99) - (statusWeight[a.status] || 99);
-        default:
-          return 0;
+        case 'DATE_DESC': return new Date(b.date || 0) - new Date(a.date || 0);
+        case 'DATE_ASC': return new Date(a.date || 0) - new Date(b.date || 0);
+        case 'STATUS_ASC': return (STATUS_WEIGHTS[a.status] || 99) - (STATUS_WEIGHTS[b.status] || 99);
+        case 'STATUS_DESC': return (STATUS_WEIGHTS[b.status] || 99) - (STATUS_WEIGHTS[a.status] || 99);
+        default: return 0;
       }
     });
-  }, [requests, searchTerm, statusFilter, sortOption]);
+  }, [requests, searchTerm, statusFilter, sortOption, showFulfilledRequests, showRejectedRequests]);
 
   return {
     requests: processedRequests,
+    allRequests: requests,
+    rawCount: requests.length,
     isLoading,
+    isFetching,
     error,
     searchTerm,
     setSearchTerm,
     statusFilter,
     setStatusFilter,
-    sortOption,       // NEW: Exported to the dashboard
-    setSortOption,    // NEW: Exported to the dashboard
-    updateStatus,
-    toggleClearance
+    showFulfilledRequests,
+    setShowFulfilledRequests,
+    showRejectedRequests,
+    setShowRejectedRequests,
+    sortOption,
+    setSortOption,
+    refreshRequests,
+    toggleClearance,
+    reviewAsRegistrar,
+    changeRequestStatus,
+    confirmPayment,
+    startRequestProcessing,
+    markReadyForPickup,
+    markPickedUp,
+    markCommentsRead,
   };
 }

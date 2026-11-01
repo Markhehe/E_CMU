@@ -1,46 +1,66 @@
-import React from 'react';
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom'; // 1. Import createPortal
 
-const Modal = ({ isOpen, onClose, title, children, maxWidth = '420px' }) => {
+const Modal = ({ isOpen, onClose, title, children, maxWidth = '420px', zIndex = 9999 }) => {
+  // 1. Accessibility & UX: Handle Escape key and Scroll Locking
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Lock background scrolling
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+
+    // Handle Escape key
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      // Cleanup on unmount or close
+      document.body.style.overflow = originalStyle;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
-  return (
-    <div 
-      style={{ 
-        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', 
-        backdropFilter: 'blur(4px)', zIndex: 9999, display: 'flex', 
-        alignItems: 'center', justifyContent: 'center' 
-      }}
-      onClick={onClose} // Closes when clicking the dark background outside the modal
+  // 2. Teleport the modal DOM nodes outside of the dashboard container
+  return createPortal(
+    <div
+      className="modal-overlay"
+      style={{ zIndex }}
+      onClick={onClose}
+      aria-hidden="true" // Hides the overlay itself from screen readers
     >
-      <div 
-        className="card-ui" 
-        style={{ 
-          backgroundColor: 'white', padding: '2.5rem', borderRadius: '12px', 
-          width: '90%', maxWidth: maxWidth, boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
-          position: 'relative'
-        }}
-        onClick={(e) => e.stopPropagation()} // Prevents closing when clicking inside the card
+      <div
+        className="modal-content card-ui"
+        style={{ maxWidth, width: '100%' }} // Added width: 100% to ensure it respects the maxWidth properly
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? 'modal-title' : undefined}
       >
-        {/* Close Button */}
-        <button 
+        <button
+          className="modal-close-btn"
           onClick={onClose}
-          style={{
-            position: 'absolute', top: '1rem', right: '1.5rem',
-            background: 'none', border: 'none', fontSize: '1.5rem',
-            cursor: 'pointer', color: 'var(--text-muted)'
-          }}
+          aria-label="Close modal"
         >
           &times;
         </button>
 
-        <h2 style={{ marginTop: 0, color: 'var(--imperial-blue)', fontFamily: 'var(--font-serif-body)', fontSize: '1.5rem', marginBottom: '1.5rem' }}>
-          {title}
-        </h2>
-        
-        {/* The specific content passed from other components goes here */}
-        {children}
+        {title && (
+          <h2 id="modal-title" className="modal-title">
+            {title}
+          </h2>
+        )}
+
+        <div className="modal-body">
+          {children}
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body // <-- This forces the modal to center relative to the browser window, ignoring the sidebar completely
   );
 };
 

@@ -39,16 +39,32 @@ export async function requireAuth(req, res, next) {
         u.email,
         u.full_name,
         u.stakeholder_type,
+<<<<<<< HEAD
+=======
+        u.student_id,
+        u.contact_phone,
+        u.contact_address,
+        directory.birthdate,
+>>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
         COALESCE(
           array_agg(r.name) FILTER (WHERE r.name IS NOT NULL),
           '{}'
         ) AS roles
       FROM users u
+<<<<<<< HEAD
+=======
+      LEFT JOIN student_directory directory ON directory.student_id = u.student_id
+>>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
       LEFT JOIN user_roles ur ON ur.user_id = u.id
       LEFT JOIN roles r ON r.id = ur.role_id
       WHERE u.id = $1
         AND u.active = TRUE
+<<<<<<< HEAD
       GROUP BY u.id, u.email, u.full_name, u.stakeholder_type
+=======
+      GROUP BY u.id, u.email, u.full_name, u.stakeholder_type,
+               u.student_id, u.contact_phone, u.contact_address, directory.birthdate
+>>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
       `,
       [userId]
     );

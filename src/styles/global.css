@@ -38,7 +38,7 @@
   --radius-lg: 16px;
   --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.05);
   --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.08);
-  
+
   /* 7. Animation */
   --transition-speed: 0.2s ease-in-out;
 }
@@ -62,7 +62,7 @@ body, h1, h2, h3, h4, p, ul, ol, figure {
 body {
   font-family: var(--font-body);
   /* Changed from imperial-blue to parchment since 80% of your app screens are light */
-  background-color: var(--parchment); 
+  background-color: var(--parchment);
   color: var(--text-dark);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;

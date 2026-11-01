@@ -44,6 +44,18 @@
   gap: var(--space-md); /* Modern way to handle spacing between form groups */
 }
 
+.request-create-modal {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.request-create-modal .request-form-embedded,
+.request-create-modal .success-message.card-ui {
+  max-width: none;
+  padding: 0;
+  box-shadow: none;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -152,12 +164,62 @@
   font-size: 0.9rem;
 }
 
-/* =========================================
-   MOBILE RESPONSIVENESS
-   ========================================= */
-@media (max-width: 600px) {
-  .form-row {
-    flex-direction: column; /* Stacks Collection and Payment method on phones */
-    gap: var(--space-md);
-  }
+
+/* Add these to your createRequest.css */
+
+.input-error {
+  border-color: #e03131 !important;
+  background-color: #fff5f5 !important;
+}
+
+.error-message {
+  color: #e03131;
+  font-size: 0.78rem;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+.required-asterisk {
+  color: #e03131;
+}
+
+.static-field-value {
+  margin: 0;
+  color: var(--text-secondary, #555);
+}
+
+.price-summary-box {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: var(--parchment, #fdfbf7);
+  border-radius: 8px;
+  border: 1px solid var(--border-light, #eaeaea);
+}
+
+.price-summary-box h3 {
+  margin: 0;
+  color: var(--imperial-blue, #003366);
+}
+
+.success-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 1rem auto;
+  color: var(--status-success, #2b8a3e);
+}
+
+.success-details-box {
+  margin: 2rem 0;
+  padding: 1rem;
+  background-color: var(--parchment, #fdfbf7);
+  border-radius: 8px;
+  text-align: left;
+}
+
+.mt-4 {
+  margin-top: 1.5rem;
+}
+
+.text-center {
+  text-align: center;
 }

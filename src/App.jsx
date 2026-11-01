@@ -1,50 +1,106 @@
+/**
+ * Module: App & Routing Architecture
+ * Central application shell defining role-based access control (RBAC),
+ * protected route guards, app-shell layouts, and route navigation trees.
+ */
+
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useAuth } from './contexts/AuthContext';
+import { scrollbarOptions } from './utils/scrollbarOptions';
 
+// Layout Shell Components
 import Sidebar from './components/layout/Sidebar';
 import PageHeader from './components/layout/PageHeader';
 
+// Page Views
 import Login from './pages/auth/Login';
 import Guide from './pages/Guide';
 import Dashboard from './pages/student/Dashboard';
 import CreateRequest from './pages/student/CreateRequest';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import FinanceDashboard from './pages/finance/FinanceDashboard';
-import SasoDashboard from './pages/saso/SasoDashboard';
-import Settings from './pages/Settings'; // NEW: Imported the Settings page
+import RegistrarDashboard from './pages/registrar/RegistrarDashboard';
+import RegistrarClearanceDashboard from './pages/registrar/RegistrarClearanceDashboard';
+import RegistrarStudents from './pages/registrar/RegistrarStudents';
+import Settings from './pages/Settings';
+import ActionCooldown from './components/ui/ActionCooldown';
 
-// DRY Principle: Centralized routing logic for all 4 user types
+/**
+ * Normalizes role strings and returns the primary home dashboard route.
+ */
 const getDefaultRoute = (role) => {
   if (!role) return '/login';
   const userRole = role.toUpperCase();
-  
-  if (userRole === 'ADMIN') return '/admin/dashboard';
-  if (userRole === 'FINANCE') return '/finance/dashboard';
-  if (userRole === 'SASO') return '/saso/dashboard';
-  
-  return '/dashboard'; // Default to student
+
+  switch (userRole) {
+    case 'REGISTRAR':
+      return '/registrar/dashboard';
+    case 'STUDENT':
+    default:
+      return '/dashboard';
+  }
 };
 
-function ProtectedRoute({ allowedRole, children }) {
-  const { isAuthenticated, currentUser } = useAuth();
+/**
+ * Route Guard Component for Role-Based Access Control (RBAC).
+ * Intercepts unauthenticated requests and handles unauthorized role redirects.
+ */
+function ProtectedRoute({ allowedRole, allowedRoles, children }) {
+  const { isAuthenticated, currentUser, isLoading } = useAuth();
 
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  
+  // Prevent flash redirects while reading token from persistent storage
+  if (isLoading) {
+    return (
+      <div className="app-loading-screen" style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        backgroundColor: 'var(--parchment, #fdfbf7)',
+        color: 'var(--imperial-blue, #022360)',
+        fontFamily: 'var(--font-heading, sans-serif)',
+        fontWeight: '600'
+      }}>
+        Loading E-CMU Portal...
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
   const userRole = currentUser?.role?.toUpperCase();
-  if (allowedRole && userRole !== allowedRole.toUpperCase()) {
+
+  // Support single string or array of allowed roles
+  const validRoles = allowedRoles
+    ? allowedRoles.map((r) => r.toUpperCase())
+    : allowedRole
+    ? [allowedRole.toUpperCase()]
+    : null;
+
+  if (validRoles && !validRoles.includes(userRole)) {
     return <Navigate to={getDefaultRoute(userRole)} replace />;
   }
-  
+
   return children;
 }
 
+/**
+ * Application Shell Layout Wrapper
+ * Encapsulates responsive sidebar drawer, top header bar, and nested page outlet.
+ */
 function AppShell() {
-  const SIDEBAR_BREAKPOINT = 900;
-  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > SIDEBAR_BREAKPOINT);
+  const SIDEBAR_BREAKPOINT = 992;
+  const [isSidebarOpen, setIsSidebarOpen] = useState(
+    window.innerWidth > SIDEBAR_BREAKPOINT
+  );
 
   useEffect(() => {
-    const handleResize = () => setIsSidebarOpen(window.innerWidth > SIDEBAR_BREAKPOINT);
+    const handleResize = () => {
+      setIsSidebarOpen(window.innerWidth > SIDEBAR_BREAKPOINT);
+    };
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -53,64 +109,108 @@ function AppShell() {
     <div className="app-shell">
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <div className="app-main">
-        <PageHeader onMenuClick={() => setIsSidebarOpen(prev => !prev)} />
-        <main className="main-content">
+        <PageHeader onMenuClick={() => setIsSidebarOpen((prev) => !prev)} />
+        <OverlayScrollbarsComponent
+          element="main"
+          className="main-content"
+          options={{
+            ...scrollbarOptions,
+            overflow: { x: 'hidden', y: 'scroll' },
+          }}
+          defer
+        >
           <Outlet />
-        </main>
+        </OverlayScrollbarsComponent>
       </div>
     </div>
   );
 }
 
+/**
+ * Main Application Component & Router Context
+ */
 function App() {
   const { isAuthenticated, currentUser } = useAuth();
 
   return (
     <BrowserRouter>
+      <ActionCooldown />
       <Routes>
-        <Route 
-          path="/login" 
+        {/* =========================================
+            AUTHENTICATION ROUTE
+            ========================================= */}
+        <Route
+          path="/login"
           element={
-            isAuthenticated 
-              ? <Navigate to={getDefaultRoute(currentUser?.role)} replace /> 
-              : <Login />
-          } 
+            isAuthenticated ? (
+              <Navigate to={getDefaultRoute(currentUser?.role)} replace />
+            ) : (
+              <Login />
+            )
+          }
         />
 
         {/* =========================================
-            SHARED ROUTES (All authenticated users)
+            ROOT DIRECT DIRECTORY REDIRECT
             ========================================= */}
-        <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+        <Route
+          path="/"
+          element={
+            isAuthenticated ? (
+              <Navigate to={getDefaultRoute(currentUser?.role)} replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        {/* =========================================
+            SHARED AUTHENTICATED ROUTES
+            ========================================= */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppShell />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/settings" element={<Settings />} />
+          <Route path="/guide" element={<Guide />} />
         </Route>
 
+        {/* =========================================
+            ROLE-SPECIFIC ROUTES
+            ========================================= */}
+
         {/* STUDENT ROUTES */}
-        <Route element={<ProtectedRoute allowedRole="STUDENT"><AppShell /></ProtectedRoute>}>
+        <Route
+          element={
+            <ProtectedRoute allowedRole="STUDENT">
+              <AppShell />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/student/create-request" element={<CreateRequest />} />
-          <Route path="/guide" element={<Guide />} />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Route>
 
         {/* REGISTRAR ROUTES */}
-        <Route element={<ProtectedRoute allowedRole="ADMIN"><AppShell /></ProtectedRoute>}>
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route
+          element={
+            <ProtectedRoute allowedRole="REGISTRAR">
+              <AppShell />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/registrar/dashboard" element={<RegistrarDashboard />} />
+          <Route path="/registrar/clearance" element={<RegistrarClearanceDashboard />} />
+          <Route path="/registrar/students" element={<RegistrarStudents />} />
+          <Route path="/registrar" element={<Navigate to="/registrar/dashboard" replace />} />
         </Route>
 
-        {/* FINANCE ROUTES */}
-        <Route element={<ProtectedRoute allowedRole="FINANCE"><AppShell /></ProtectedRoute>}>
-          <Route path="/finance/dashboard" element={<FinanceDashboard />} />
-          <Route path="/finance" element={<Navigate to="/finance/dashboard" replace />} />
-        </Route>
-
-        {/* SASO ROUTES */}
-        <Route element={<ProtectedRoute allowedRole="SASO"><AppShell /></ProtectedRoute>}>
-          <Route path="/saso/dashboard" element={<SasoDashboard />} />
-          <Route path="/saso" element={<Navigate to="/saso/dashboard" replace />} />
-        </Route>
-
-        {/* Catch-all 404 Route */}
+        {/* =========================================
+            404 CATCH-ALL REDIRECT
+            ========================================= */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>

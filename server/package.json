@@ -7,10 +7,17 @@
     "start": "tsx src/index.ts",
     "test": "vitest run",
     "migrate": "node src/db/migrate.js",
+<<<<<<< HEAD
     "seed": "node src/db/seed.js",
     "dev": "tsx watch src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+=======
+    "seed": "tsx src/db/seed.ts",
+    "dev": "tsx watch src/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node src/db/migrate.js",
+>>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts"
@@ -29,6 +36,10 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.12.0",
+<<<<<<< HEAD
+=======
+    "nodemailer": "^10.0.15",
+>>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     "pg": "^8.23.0",
     "zod": "^4.6.5"
   },

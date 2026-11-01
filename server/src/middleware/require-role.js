@@ -1,18 +1,27 @@
 const KNOWN_ROLES = new Set([
+<<<<<<< HEAD
   "requester",
   "registrar",
   "saso",
   "finance",
   "administrator",
+=======
+  "student",
+  "registrar",
+>>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 ]);
 
 /**
  * Require the authenticated user to have at least one of the supplied roles.
  * Use this after requireAuth because it expects req.user to exist.
  *
+<<<<<<< HEAD
  * Examples:
  *   requireRole("finance")
  *   requireRole("registrar", "administrator")
+=======
+ * Example: requireRole("registrar")
+>>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
  */
 export function requireRole(...allowedRoles) {
   if (allowedRoles.length === 0) {
