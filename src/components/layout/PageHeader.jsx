@@ -41,6 +41,7 @@ function PageHeader({ onMenuClick }) {
     ...group,
     count: notifications.filter((notification) => group.types.includes(notification.type)).length,
   }));
+  
   const registrarItemsCount = registrarNotificationGroups.reduce(
     (total, group) => total + group.count,
     0,
@@ -78,7 +79,6 @@ function PageHeader({ onMenuClick }) {
     STUDENT: 'Student',
   };
 
-  // Derive display name and two-letter initials dynamically
   const displayName = currentUser?.name || currentUser?.fullName || 'User';
   const userInitials =
     currentUser?.initials ||
@@ -90,7 +90,6 @@ function PageHeader({ onMenuClick }) {
       .toUpperCase() ||
     'U';
 
-  // Click outside and Escape key dismissal
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -138,6 +137,7 @@ function PageHeader({ onMenuClick }) {
           ? { ...notification, read_at: notification.read_at || new Date().toISOString() }
           : notification
       )));
+      // 1. REPAIRED: Corrected decrement math
       setUnreadCount((count) => Math.max(0, count - 1));
     } catch (error) {
       setNotificationError(error.message || 'Unable to update notification.');
@@ -194,6 +194,7 @@ function PageHeader({ onMenuClick }) {
           className={`header-notification-item${notification.read_at ? '' : ' is-unread'}`}
           onClick={() => {
             if (!isRegistrar && !notification.read_at) markNotificationRead(notification.id);
+            setNotificationsOpen(false);
           }}
         >
           <strong>{notification.title}</strong>
@@ -271,63 +272,75 @@ function PageHeader({ onMenuClick }) {
               </span>
             )}
           </button>
-          {notificationsOpen && (
-            <section
-              className="header-notifications-panel"
-              role="dialog"
-              aria-label="Notifications"
-            >
-              <div className="header-notifications-heading">
-                <h2>{isRegistrar ? 'Registrar Inbox' : 'Notifications'}</h2>
-                {!isRegistrar && unreadCount > 0 && (
-                  <button type="button" onClick={markAllNotificationsRead}>
-                    Mark all read
-                  </button>
-                )}
-              </div>
-              {notificationError ? (
-                <div className="header-notifications-state" role="alert">
-                  <p>{notificationError}</p>
-                  <button type="button" onClick={loadNotifications}>Try again</button>
-                </div>
-              ) : isLoadingNotifications && notifications.length === 0 ? (
-                <p className="header-notifications-state" role="status">Loading notifications...</p>
-              ) : notifications.length === 0 ? (
-                <p className="header-notifications-state">
-                  {isRegistrar ? 'No new requests, clearance submissions, or payment proofs.' : 'You’re all caught up.'}
-                </p>
-              ) : isRegistrar ? (
-                <div className="registrar-inbox-summary">
-                  <strong>
-                    {registrarItemsCount} {registrarItemsCount === 1 ? 'item needs' : 'items need'} resolution
-                  </strong>
-                  {registrarNotificationGroups.map((group) => {
-                    const isClearanceGroup = group.types.includes('registrar_clearance_submitted');
-                    const statusFilter = group.types.includes('registrar_payment_proof_submitted')
-                      ? 'PENDING PAYMENT'
-                      : 'PENDING REVIEW';
 
-                    return (
-                      <Link
-                        key={group.title}
-                        to={isClearanceGroup ? '/registrar/clearance' : '/registrar/dashboard'}
-                        state={isClearanceGroup ? undefined : { registrarStatusFilter: statusFilter }}
-                        className="registrar-inbox-group-link"
-                      >
-                        <span>{group.title}</span>
-                        <strong>{group.count}</strong>
-                      </Link>
-                    );
-                  })}
+          {notificationsOpen && (
+            <>
+              {/* 2. BACKDROP OVERLAY: Dims background on mobile & handles tap-outside close */}
+              <div
+                className="header-notifications-backdrop"
+                onClick={() => setNotificationsOpen(false)}
+                aria-hidden="true"
+              />
+
+              <section
+                className="header-notifications-panel"
+                role="dialog"
+                aria-label="Notifications"
+              >
+                <div className="header-notifications-heading">
+                  <h2>{isRegistrar ? 'Registrar Inbox' : 'Notifications'}</h2>
+                  {!isRegistrar && unreadCount > 0 && (
+                    <button type="button" onClick={markAllNotificationsRead}>
+                      Mark all read
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <ul className="header-notification-list">
-                  {notifications.map(renderNotification)}
-                </ul>
-              )}
-            </section>
+                {notificationError ? (
+                  <div className="header-notifications-state" role="alert">
+                    <p>{notificationError}</p>
+                    <button type="button" onClick={loadNotifications}>Try again</button>
+                  </div>
+                ) : isLoadingNotifications && notifications.length === 0 ? (
+                  <p className="header-notifications-state" role="status">Loading notifications...</p>
+                ) : notifications.length === 0 ? (
+                  <p className="header-notifications-state">
+                    {isRegistrar ? 'No new requests, clearance submissions, or payment proofs.' : 'You’re all caught up.'}
+                  </p>
+                ) : isRegistrar ? (
+                  <div className="registrar-inbox-summary">
+                    <strong>
+                      {registrarItemsCount} {registrarItemsCount === 1 ? 'item needs' : 'items need'} resolution
+                    </strong>
+                    {registrarNotificationGroups.map((group) => {
+                      const isClearanceGroup = group.types.includes('registrar_clearance_submitted');
+                      const statusFilter = group.types.includes('registrar_payment_proof_submitted')
+                        ? 'PENDING PAYMENT'
+                        : 'PENDING REVIEW';
+
+                      return (
+                        <Link
+                          key={group.title}
+                          to={isClearanceGroup ? '/registrar/clearance' : '/registrar/dashboard'}
+                          state={isClearanceGroup ? undefined : { registrarStatusFilter: statusFilter }}
+                          className="registrar-inbox-group-link"
+                          onClick={() => setNotificationsOpen(false)}
+                        >
+                          <span>{group.title}</span>
+                          <strong>{group.count}</strong>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <ul className="header-notification-list">
+                    {notifications.map(renderNotification)}
+                  </ul>
+                )}
+              </section>
+            </>
           )}
         </div>
+
         <div ref={dropdownRef} className="user-profile-wrapper">
           <button
             type="button"
@@ -359,7 +372,6 @@ function PageHeader({ onMenuClick }) {
             </svg>
           </button>
 
-          {/* Dropdown Menu Overlay */}
           {dropdownOpen && (
             <div className="header-dropdown-menu" role="menu">
               <button

@@ -74,3 +74,48 @@
 .toast.default {
   border-left-color: var(--text-muted);
 }
+/* Mobile Optimization */
+@media (max-width: 600px) {
+  .toast-container {
+    bottom: auto;
+    top: 16px;
+    /* Anchor to both sides with a 16px gap, naturally centering it without transforms */
+    left: 16px;  
+    right: 16px; 
+    width: auto; 
+    transform: none; /* Kill the transform that pushed it off-screen */
+    align-items: stretch; /* Forces the toasts to stretch full width */
+  }
+
+  .toast {
+    width: 100%;
+    min-width: 0; /* Clears the desktop min-width */
+    box-sizing: border-box; /* Prevents padding from breaking the width */
+  }
+
+  /* Reverse the animation for mobile so it slides down from the top */
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .toast {
+    animation: slideDown 0.3s ease forwards;
+  }
+}
+/* Graceful Exit Animation */
+.toast-exit {
+  animation: fadeOut 0.3s ease forwards !important;
+}
+
+@keyframes fadeOut {
+  from { 
+    opacity: 1; 
+    transform: scale(1); 
+  }
+  to { 
+    opacity: 0; 
+    transform: scale(0.9); 
+    margin-top: -50px; /* Gently pulls the next toast up as this one shrinks */
+  }
+}

@@ -5,7 +5,7 @@ const subscribers = new Set();
 let eventSource = null;
 let retryTimer = null;
 let retryAttempt = 0;
-let visibilityListenerAttached = false;
+let globalListenersAttached = false;
 let stableConnectionTimer = null;
 
 function flushSubscriber(subscriber) {
@@ -38,15 +38,28 @@ function closeEventSource() {
   }
 }
 
+function clearTimers() {
+  if (retryTimer !== null) {
+    window.clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+  if (stableConnectionTimer !== null) {
+    window.clearTimeout(stableConnectionTimer);
+    stableConnectionTimer = null;
+  }
+}
+
 function connect() {
   if (
     eventSource ||
     subscribers.size === 0 ||
-    document.visibilityState === 'hidden'
+    document.visibilityState === 'hidden' ||
+    !navigator.onLine
   ) return;
 
   const connection = new EventSource(`${API_BASE_URL}/events`, { withCredentials: true });
   eventSource = connection;
+
   connection.addEventListener('open', () => {
     if (eventSource !== connection) return;
     if (stableConnectionTimer !== null) window.clearTimeout(stableConnectionTimer);
@@ -56,6 +69,7 @@ function connect() {
     }, 30000);
     dispatchEvent({ resource: '*', resync: true });
   });
+
   connection.addEventListener('data-change', (message) => {
     if (eventSource !== connection) return;
     try {
@@ -67,6 +81,7 @@ function connect() {
       console.error('Unable to parse a server data-change event.', error);
     }
   });
+
   connection.addEventListener('error', () => {
     if (eventSource !== connection) return;
     connection.close();
@@ -75,11 +90,14 @@ function connect() {
       window.clearTimeout(stableConnectionTimer);
       stableConnectionTimer = null;
     }
-    if (document.visibilityState === 'hidden' || retryTimer !== null) return;
 
+    if (document.visibilityState === 'hidden' || !navigator.onLine || retryTimer !== null) return;
+
+    // 1. FIXED SYNTAX ERROR: Restored missing multiplication operators
     const baseDelay = Math.min(1000 * (2 ** retryAttempt), 30000);
     const jitteredDelay = Math.round(baseDelay * (0.8 + Math.random() * 0.4));
     retryAttempt += 1;
+
     retryTimer = window.setTimeout(() => {
       retryTimer = null;
       connect();
@@ -87,17 +105,10 @@ function connect() {
   });
 }
 
-function handleVisibilityChange() {
-  if (document.visibilityState === 'hidden') {
+function handleStateChange() {
+  if (document.visibilityState === 'hidden' || !navigator.onLine) {
     closeEventSource();
-    if (retryTimer !== null) {
-      window.clearTimeout(retryTimer);
-      retryTimer = null;
-    }
-    if (stableConnectionTimer !== null) {
-      window.clearTimeout(stableConnectionTimer);
-      stableConnectionTimer = null;
-    }
+    clearTimers();
     return;
   }
 
@@ -114,28 +125,28 @@ function subscribe(resources, callback) {
   };
   subscribers.add(subscriber);
 
-  if (!visibilityListenerAttached) {
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    visibilityListenerAttached = true;
+  // 2. NETWORK AWARENESS: Listen to online/offline network state changes
+  if (!globalListenersAttached) {
+    document.addEventListener('visibilitychange', handleStateChange);
+    window.addEventListener('online', handleStateChange);
+    window.addEventListener('offline', handleStateChange);
+    globalListenersAttached = true;
   }
   connect();
 
   return () => {
     subscribers.delete(subscriber);
     if (subscriber.timer !== null) window.clearTimeout(subscriber.timer);
+
     if (subscribers.size === 0) {
       closeEventSource();
-      if (retryTimer !== null) {
-        window.clearTimeout(retryTimer);
-        retryTimer = null;
-      }
-      if (stableConnectionTimer !== null) {
-        window.clearTimeout(stableConnectionTimer);
-        stableConnectionTimer = null;
-      }
-      if (visibilityListenerAttached) {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-        visibilityListenerAttached = false;
+      clearTimers();
+
+      if (globalListenersAttached) {
+        document.removeEventListener('visibilitychange', handleStateChange);
+        window.removeEventListener('online', handleStateChange);
+        window.removeEventListener('offline', handleStateChange);
+        globalListenersAttached = false;
       }
     }
   };

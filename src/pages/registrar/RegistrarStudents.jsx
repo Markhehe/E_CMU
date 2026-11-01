@@ -1,23 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useOverlayScrollbars } from 'overlayscrollbars-react';
 import { useServerEvents } from '../../hooks/useServerEvents';
 import { ClearanceService } from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import ClearancePreviewModal from '../../components/ui/ClearancePreviewModal';
 import Modal from '../../components/ui/Modal';
+import StatusBadge from '../../components/ui/StatusBadge'; // Added StatusBadge
 import { scrollbarOptions } from '../../utils/scrollbarOptions';
 import '../../styles/dashboard.css';
 import '../../styles/registrarStudents.css';
 
-function displayStatus(status = '') {
-  return status
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
+// Replaced raw displayStatus with our standardized StatusBadge component below.
 
 function RegistrarStudents() {
   const location = useLocation();
+  const navigate = useNavigate(); // Added for state cleanup
   const [query, setQuery] = useState('');
   const [students, setStudents] = useState([]);
   const [activeSearchTerm, setActiveSearchTerm] = useState('');
@@ -30,10 +28,12 @@ function RegistrarStudents() {
   const [invalidationReason, setInvalidationReason] = useState('');
   const invalidationLimitNotified = useRef(false);
   const [isInvalidating, setIsInvalidating] = useState(false);
+  
   const { addToast } = useToast();
   const latestSearchId = useRef(0);
   const latestProfileId = useRef(0);
   const tableWrapperRef = useRef(null);
+  
   const [initializeScrollbars] = useOverlayScrollbars({
     options: {
       ...scrollbarOptions,
@@ -47,6 +47,17 @@ function RegistrarStudents() {
     setSelectedStudent(null);
     setIsLoadingProfile(false);
   }, []);
+
+  // --- REPLACED WINDOW LISTENER WITH ROUTER STATE ---
+  useEffect(() => {
+    if (location.state?.action === 'show-list') {
+      clearSelectedStudent();
+      
+      // Clean up the location state so a simple page reload doesn't keep triggering this
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state, location.pathname, navigate, clearSelectedStudent]);
+  // --------------------------------------------------
 
   const loadStudents = useCallback(async (searchTerm) => {
     const searchId = ++latestSearchId.current;
@@ -91,11 +102,6 @@ function RegistrarStudents() {
     };
   }, [addToast]);
 
-  useEffect(() => {
-    window.addEventListener('student-records:show-list', clearSelectedStudent);
-    return () => window.removeEventListener('student-records:show-list', clearSelectedStudent);
-  }, [clearSelectedStudent]);
-
   const searchStudents = async (event) => {
     event.preventDefault();
     const searchTerm = query.trim();
@@ -103,7 +109,6 @@ function RegistrarStudents() {
       addToast('Enter at least 2 characters to search by student name or ID.', 'error');
       return;
     }
-
     await loadStudents(searchTerm);
   };
 
@@ -138,6 +143,7 @@ function RegistrarStudents() {
     const studentIdentifier = student?.student_id || student?.email;
     if (studentIdentifier) openStudent(studentIdentifier, { showLoading: false });
   }, [openStudent, student?.email, student?.student_id]);
+  
   useServerEvents(['requests', 'clearances'], refreshSelectedStudent, Boolean(student));
 
   const currentClearance = selectedStudent?.clearances.find((clearance) => clearance.is_current);
@@ -332,8 +338,10 @@ function RegistrarStudents() {
               <div className="student-current-clearance">
                 <div className="student-current-clearance-details">
                   <span className="student-current-clearance-label">Status</span>
-                  <strong>{displayStatus(currentClearance.status)}</strong>
-                  <span className="doc-meta">
+                  {/* UX Upgrade: Replaced raw text with our semantic StatusBadge */}
+                  <StatusBadge status={currentClearance.status} />
+                  
+                  <span className="doc-meta" style={{ marginLeft: '8px' }}>
                     Submitted {new Date(currentClearance.submitted_at).toLocaleString()}
                   </span>
                   {currentClearance.comment && (
@@ -384,7 +392,10 @@ function RegistrarStudents() {
                       <tr key={request.id}>
                         <td>{request.display_code}</td>
                         <td>{request.document_name}</td>
-                        <td>{displayStatus(request.status)}</td>
+                        
+                        {/* UX Upgrade: Replaced displayStatus with StatusBadge */}
+                        <td><StatusBadge status={request.status} /></td>
+                        
                         <td>{request.purpose || '—'}</td>
                         <td>{request.submitted_at ? new Date(request.submitted_at).toLocaleDateString() : '—'}</td>
                         <td>{request.completed_at ? new Date(request.completed_at).toLocaleDateString() : '—'}</td>

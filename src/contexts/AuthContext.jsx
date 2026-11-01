@@ -132,7 +132,30 @@ export const AuthProvider = ({ children }) => {
     [currentUser, isLoading, login, logout, updateUserProfile]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  // Block rendering unauthenticated routes only if we don't have local data YET and are still loading
+  const isVerifying = isLoading && !currentUser;
+
+  return (
+    <AuthContext.Provider value={value}>
+      {isVerifying ? (
+        <div style={{
+          display: 'flex',
+          height: '100vh',
+          width: '100vw',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#f8f9fa',
+          color: '#022360',
+          fontFamily: 'system-ui, sans-serif',
+          fontWeight: '600'
+        }}>
+          Verifying session...
+        </div>
+      ) : (
+        children
+      )}
+    </AuthContext.Provider>
+  );
 };
 
 export const useAuth = () => {

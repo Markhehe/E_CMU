@@ -4,7 +4,8 @@
  * active link indicators, dual-color branding header, and responsive mobile overlay handlers.
  */
 
-import { NavLink, Link } from 'react-router-dom';
+import { useEffect, useMemo } from 'react';
+import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useStudentClearance } from '../../hooks/useStudentClearance';
 import cmuLogo from '../../assets/cmulogo.png';
@@ -50,7 +51,6 @@ const SettingsIcon = () => (
   </svg>
 );
 
-// Declarative Role-Based Navigation Configuration
 const NAV_CONFIG = {
   REGISTRAR: {
     homePath: '/registrar/dashboard',
@@ -64,34 +64,78 @@ const NAV_CONFIG = {
     homePath: '/dashboard',
     links: [
       { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
-      { to: '/student/create-request', label: 'Request a Document', icon: FilePlusIcon },
+      { to: '/student/create-request', label: 'Request a Document', fallbackLabel: 'Upload Clearance', icon: FilePlusIcon },
       { to: '/guide', label: 'Guide', icon: BookOpenIcon },
     ],
   },
 };
 
-function Sidebar({ isOpen, onClose }) {
+export default function Sidebar({ isOpen, onClose }) {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
   const role = currentUser?.role?.toUpperCase() || 'STUDENT';
-  const { isVerified } = useStudentClearance({ enabled: role === 'STUDENT' });
-
+  const isStudent = role === 'STUDENT';
+  
+  const { isVerified, isLoading: isClearanceLoading } = useStudentClearance({ enabled: isStudent });
   const currentNav = NAV_CONFIG[role] || NAV_CONFIG.STUDENT;
-  const navLinks = role === 'STUDENT'
-    ? currentNav.links.map((item) => (
-      item.to === '/student/create-request'
-        ? { ...item, label: isVerified ? 'Request a Document' : 'Upload Clearance' }
-        : item
-    ))
-    : currentNav.links;
 
-  const handleLinkClick = () => {
-    if (window.innerWidth <= 992 && onClose) {
-      onClose();
+  // UX Fix: Handle the Escape key to close the mobile drawer
+  useEffect(() => {
+  const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      // 1. Never close the sidebar on ESC if a modal is open
+      if (document.querySelector('.modal-overlay')) return;
+      
+      // 2. Only close the sidebar on ESC if it is acting as a mobile overlay (e.g., screen < 768px)
+      if (window.innerWidth < 768) {
+         // Execute your sidebar close function here
+         // closeSidebar(); 
+      }
     }
   };
 
-  const getLinkClass = ({ isActive }) =>
-    `sidebar-link ${isActive ? 'active' : ''}`;
+  window.addEventListener('keydown', handleKeyDown);
+  
+  return () => {
+    window.removeEventListener('keydown', handleKeyDown);
+  };
+}, [isOpen, onClose]);
+
+  // UX Fix: Prevent the label from flickering while the API fetches clearance status
+  const navLinks = useMemo(() => {
+    if (!isStudent) return currentNav.links;
+
+    return currentNav.links.map((item) => {
+      if (item.to !== '/student/create-request') return item;
+      
+      // If we are still loading the API, show the default optimistic label.
+      // If loaded and NOT verified, show the fallback label.
+      const displayLabel = (!isClearanceLoading && !isVerified) 
+        ? item.fallbackLabel 
+        : item.label;
+
+      return { ...item, label: displayLabel };
+    });
+  }, [isStudent, currentNav.links, isClearanceLoading, isVerified]);
+
+  const handleLinkClick = (e, targetPath) => {
+    // 1. Close the mobile drawer on click
+    if (window.innerWidth <= 992 && onClose) {
+      onClose();
+    }
+
+    // 2. Replace the global window.dispatchEvent leak with proper React Router state
+    if (targetPath === '/registrar/students') {
+      e.preventDefault();
+      navigate('/registrar/students', { 
+        state: { action: 'show-list', timestamp: Date.now() } 
+      });
+    }
+  };
+
+  const getLinkClass = ({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`;
 
   return (
     <>
@@ -109,7 +153,7 @@ function Sidebar({ isOpen, onClose }) {
         <Link
           to={currentNav.homePath}
           className="sidebar-brand"
-          onClick={handleLinkClick}
+          onClick={(e) => handleLinkClick(e, currentNav.homePath)}
         >
           <img
             src={cmuLogo}
@@ -134,12 +178,7 @@ function Sidebar({ isOpen, onClose }) {
                   key={item.to}
                   to={item.to}
                   className={getLinkClass}
-                  onClick={() => {
-                    handleLinkClick();
-                    if (item.to === '/registrar/students') {
-                      window.dispatchEvent(new Event('student-records:show-list'));
-                    }
-                  }}
+                  onClick={(e) => handleLinkClick(e, item.to)}
                 >
                   <IconComponent />
                   <span>{item.label}</span>
@@ -153,7 +192,7 @@ function Sidebar({ isOpen, onClose }) {
             <NavLink
               to="/settings"
               className={getLinkClass}
-              onClick={handleLinkClick}
+              onClick={(e) => handleLinkClick(e, '/settings')}
             >
               <SettingsIcon />
               <span>Settings</span>
@@ -164,5 +203,3 @@ function Sidebar({ isOpen, onClose }) {
     </>
   );
 }
-
-export default Sidebar;

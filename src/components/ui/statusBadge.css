@@ -94,3 +94,27 @@
   background-color: #f08c00;
   box-shadow: 0 0 0 3px rgba(240, 140, 0, 0.15); /* Subtle glowing ring */
 }
+
+/* Badge Layout */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem; /* Space between icon and text */
+  text-transform: uppercase; /* Ensures uniform casing regardless of DB input */
+}
+
+/* Icon Sizing */
+.badge-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Sync Animation */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 2s linear infinite;
+}

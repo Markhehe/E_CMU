@@ -50,10 +50,13 @@
   margin-top: 0.45rem;
 }
 
+/* =========================================
+   UI/UX IMPROVEMENT: REGISTRAR KPI SUMMARY CARDS
+   ========================================= */
 .registrar-request-summary {
   display: grid;
-  grid-template-columns: repeat(6, minmax(3.75rem, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: repeat(6, minmax(4.5rem, 1fr));
+  gap: 0.6rem;
   flex-shrink: 0;
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--border-light);
@@ -67,20 +70,28 @@
   min-width: 0;
   flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.15rem;
+  gap: 0.35rem;
+  padding: 0.4rem 0.25rem;
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: transparent;
+  background: #f8fafc;
   text-align: center;
   cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.registrar-request-summary-item:hover {
+  background: #eef2ff;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
 }
 
 .registrar-request-summary-item:hover .registrar-request-summary-count,
 .registrar-request-summary-item:focus-visible .registrar-request-summary-count,
 .registrar-request-summary-item.is-active .registrar-request-summary-count {
-  border-color: var(--honey-bronze);
-  background: var(--honey-bronze);
-  color: var(--imperial-blue);
+  border-color: var(--imperial-blue);
+  background: var(--imperial-blue);
+  color: #ffffff;
 }
 
 .registrar-request-summary-item:focus-visible {
@@ -88,23 +99,32 @@
   outline-offset: 2px;
 }
 
+.registrar-request-summary-item.is-active {
+  background: #eef4ff;
+  border-color: var(--imperial-blue);
+  box-shadow: 0 2px 6px rgba(2, 35, 96, 0.1);
+}
+
 .registrar-request-summary-item.is-active .registrar-request-summary-label {
   color: var(--imperial-blue);
+  font-weight: 700;
 }
 
 .registrar-request-summary-count {
   display: flex;
-  width: 2.75rem;
-  height: 2.75rem;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  padding: 0 0.5rem;
   align-items: center;
   justify-content: center;
-  border: 2px solid rgba(238, 168, 64, 0.55);
-  border-radius: 50%;
-  background: var(--imperial-blue);
-  color: var(--surface-white);
-  font-size: 1rem;
-  font-weight: 700;
+  border: 2px solid rgba(2, 35, 96, 0.2);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--imperial-blue);
+  font-size: 0.95rem;
+  font-weight: 800;
   line-height: 1;
+  transition: all 160ms ease;
 }
 
 .registrar-request-summary-label {
@@ -163,7 +183,7 @@
 }
 
 /* =========================================
-   2. TABLE TOOLBAR (Zero Overlap Position)
+   2. TABLE TOOLBAR
    ========================================= */
 .table-toolbar {
   display: flex;
@@ -276,7 +296,7 @@
 }
 
 /* =========================================
-   3. TABLE UI & SCROLL CONTAINMENT
+   3. TABLE UI & SCROLL CONTAINMENT (FIXED OVERLAP)
    ========================================= */
 .request-table-wrapper {
   flex: 1;
@@ -321,9 +341,9 @@
 
 .request-table {
   width: 100%;
-  min-width: 0;
+  min-width: 840px; /* GUARANTEES TABLE WILL SCROLL RATHER THAN SQUEEZE ON 15" DISPLAYS */
   border-collapse: collapse;
-  table-layout: fixed;
+  table-layout: fixed; /* DYNAMIC FLEXIBLITY FOR COLUMNS */
   margin: 0;
 }
 
@@ -350,16 +370,19 @@
 .request-table td.actions-cell {
   text-align: right !important;
   padding-right: 1.25rem !important;
+  width: 280px;
+  min-width: 260px; /* ENSURES ENOUGH ROOM FOR INLINE BUTTONS */
 }
 
-/* Center Align Status Header & Badge Cells */
 .request-table th.col-status,
 .request-table td.col-status-cell {
   text-align: center !important;
+  width: 160px;
+  min-width: 150px; /* PROTECTS STATUS BADGE CELL BOUNDARY */
 }
 
 .request-table td.col-status-cell .status-stack {
-  align-items: center !important; /* Centers the pill inside flex containers */
+  align-items: center !important;
   justify-content: center !important;
   width: 100%;
 }
@@ -506,7 +529,7 @@
 }
 
 /* =========================================
-   5. BUTTONS & ACTIONS
+   5. BUTTONS & ACTIONS (OVERLAP FIX)
    ========================================= */
 .btn-primary {
   padding: 0.55rem 1.1rem;
@@ -558,7 +581,7 @@
   align-items: center;
   justify-content: flex-end;
   flex-wrap: nowrap;
-  gap: 0.35rem;
+  gap: 0.4rem;
   white-space: nowrap;
 }
 
@@ -568,8 +591,6 @@
 }
 
 .workflow-step-button {
-  flex: 0 0 8.5rem;
-  width: 8.5rem;
   position: relative;
   padding: 0.35rem 0.55rem;
   border: 1px solid var(--border-light);
@@ -585,9 +606,7 @@
 .workflow-step-button.workflow-action-button {
   flex: 0 0 auto;
   width: auto;
-  min-width: 7.25rem;
-  min-height: 2.4rem;
-  padding: 0.5rem 0.8rem;
+  padding: 0.4rem 0.75rem;
   border-radius: 8px;
   box-shadow: 0 2px 5px rgba(2, 35, 96, 0.08);
   font-size: 0.82rem;
@@ -727,6 +746,7 @@ textarea.auth-input {
   color: var(--imperial-blue);
 }
 
+/* REPAIRED: Flexible auto-sizing for inline dashboard workflow buttons */
 .clearance-review-button,
 .registrar-dashboard-page .workflow-inline-actions > .workflow-step-button,
 .student-dashboard-page .workflow-inline-actions > .workflow-step-button,
@@ -734,23 +754,13 @@ textarea.auth-input {
 .student-records-page .student-current-clearance-actions > .btn-danger {
   flex: 0 0 auto;
   width: auto;
-  min-width: 7rem;
-  min-height: 2.4rem;
-  padding: 0.5rem 0.85rem;
+  min-width: auto;
+  padding: 0.4rem 0.75rem;
   border-radius: 999px;
   font-size: 0.8rem;
   font-weight: 700;
-  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
-}
-
-.registrar-dashboard-page .workflow-inline-actions > .workflow-step-button,
-.student-dashboard-page .workflow-inline-actions > .workflow-step-button,
-.student-records-page .student-records-view-button,
-.student-records-page .student-current-clearance-actions > .btn-danger {
-  flex: 0 0 10rem;
-  width: 10rem;
-  min-width: 10rem;
   box-sizing: border-box;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .clearance-review-button:hover:not(:disabled),
@@ -904,7 +914,7 @@ textarea.auth-input {
 }
 
 /* =========================================
-   7. DASHBOARD MODALS & FORMS
+   7. DASHBOARD MODALS, FORMS & MOBILE NOTIFICATION BOUNDS
    ========================================= */
 .modal-text {
   color: var(--text-muted);
@@ -1427,9 +1437,12 @@ textarea.auth-input {
   box-shadow: 0 0 0 3px rgba(2, 35, 96, 0.12);
 }
 
+/* MOBILE BOUNDS SAFETY FOR NOTIFICATIONS & MODALS */
 .student-notification-details {
   display: grid;
   gap: 0.85rem;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .student-notification-details > p {
@@ -1442,6 +1455,7 @@ textarea.auth-input {
   font-size: 0.9rem;
   line-height: 1.55;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .request-details-container {
@@ -1462,6 +1476,7 @@ textarea.auth-input {
   color: #40516b;
   font-size: 0.9rem;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .payment-confirmation-code {
@@ -1567,6 +1582,7 @@ textarea.auth-input {
 
   .registrar-request-summary {
     width: 100%;
+    box-sizing: border-box;
   }
 }
 
@@ -1576,14 +1592,15 @@ textarea.auth-input {
   }
 
   .registrar-request-summary {
-    gap: 0.25rem;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
     padding: 0.55rem 0.4rem;
   }
 
   .registrar-request-summary-count {
-    width: 2.4rem;
-    height: 2.4rem;
-    font-size: 0.9rem;
+    min-width: 2rem;
+    height: 2rem;
+    font-size: 0.85rem;
   }
 
   .registrar-request-summary-label {
@@ -1772,4 +1789,30 @@ textarea.auth-input {
   font-size: 0.8rem;
   color: var(--text-muted);
   margin-top: 0.15rem;
+}
+
+/* Mobile Pagination Optimization */
+@media (max-width: 600px) {
+  /* Note: If your RequestPagination component uses a different wrapper class 
+     like .pagination or .request-pagination, swap it here! */
+  .pagination-container, 
+  .request-pagination,
+  .pagination {
+    display: flex;
+    flex-wrap: wrap; /* This is the magic line that fixes the cut-off */
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 16px 0;
+    box-sizing: border-box;
+  }
+
+  /* Target the actual buttons/numbers inside the pagination */
+  .pagination button,
+  .request-pagination button,
+  .page-item {
+    flex: 0 1 auto;
+    min-width: 36px; /* Ensures the buttons stay highly tappable on touchscreens */
+    text-align: center;
+  }
 }
