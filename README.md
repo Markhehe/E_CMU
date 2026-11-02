@@ -29,14 +29,22 @@ pickup, comment, and payment confirmation emails.
 Back up an existing database before applying pending migrations, then run:
 
 ```sh
+npm run db:generate
 npm run db:migrate
 npm run seed
 npm run dev
 ```
 
-The ordered SQL files in `server/src/db/migrations/` are the canonical
-migrations. Both `npm run migrate` and `npm run db:migrate` apply that same
-sequence; do not apply the separate Drizzle Kit-generated SQL files directly.
+`server/src/db/schema.ts` is the canonical schema. Create future migrations with
+`npm run db:generate`; apply them with `npm run db:migrate` (or its `migrate`
+alias). Generated migration SQL and Drizzle metadata live in `server/drizzle/`.
+The ordered files in `server/src/db/migrations/` are retained as the legacy
+history for existing databases. The migration wrapper completes any pending
+legacy migrations recorded in `public.migrations`, then adopts the current
+Drizzle baseline without replaying it. Fresh databases use the Drizzle
+migrations directly. If an existing schema has no recognized migration ledger,
+the wrapper stops instead of replaying the baseline.
+
 The student-name typo-tolerant search uses PostgreSQL's `pg_trgm` extension;
 the migration runner's database role must be allowed to create that extension.
 

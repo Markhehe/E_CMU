@@ -1,5 +1,5 @@
 {
-  "id": "ed0b1519-62f6-4bcd-8993-73c7e41d1579",
+  "id": "b2d3e0b9-d821-46e3-a415-98bf97c08307",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -10,20 +10,9 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "bigint",
+          "type": "bigserial",
           "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "audit_logs_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
+          "notNull": true
         },
         "actor_id": {
           "name": "actor_id",
@@ -33,13 +22,13 @@
         },
         "action": {
           "name": "action",
-          "type": "varchar(100)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
         "entity_type": {
           "name": "entity_type",
-          "type": "varchar(50)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -108,8 +97,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.document_types": {
-      "name": "document_types",
+    "public.clearance_submissions": {
+      "name": "clearance_submissions",
       "schema": "",
       "columns": {
         "id": {
@@ -119,7 +108,7 @@
           "notNull": true,
           "identity": {
             "type": "always",
-            "name": "document_types_id_seq",
+            "name": "clearance_submissions_id_seq",
             "schema": "public",
             "increment": "1",
             "startWith": "1",
@@ -129,9 +118,132 @@
             "cycle": false
           }
         },
+        "user_id": {
+          "name": "user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_data": {
+          "name": "file_data",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "original_name": {
+          "name": "original_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'submitted'"
+        },
+        "comment": {
+          "name": "comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submitted_at": {
+          "name": "submitted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "reviewed_by": {
+          "name": "reviewed_by",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reviewed_at": {
+          "name": "reviewed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "clearance_submissions_user_idx": {
+          "name": "clearance_submissions_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "submitted_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "clearance_submissions_user_id_users_id_fk": {
+          "name": "clearance_submissions_user_id_users_id_fk",
+          "tableFrom": "clearance_submissions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "clearance_submissions_reviewed_by_users_id_fk": {
+          "name": "clearance_submissions_reviewed_by_users_id_fk",
+          "tableFrom": "clearance_submissions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "clearance_submissions_status_check": {
+          "name": "clearance_submissions_status_check",
+          "value": "\"clearance_submissions\".\"status\" in ('submitted', 'needs_update', 'verified')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.document_types": {
+      "name": "document_types",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigserial",
+          "primaryKey": true,
+          "notNull": true
+        },
         "name": {
           "name": "name",
-          "type": "varchar(150)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -150,7 +262,7 @@
         },
         "currency": {
           "name": "currency",
-          "type": "varchar(3)",
+          "type": "char(3)",
           "primaryKey": false,
           "notNull": true,
           "default": "'USD'"
@@ -190,7 +302,81 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "document_types_base_fee_check": {
+          "name": "document_types_base_fee_check",
+          "value": "\"document_types\".\"base_fee\" >= 0"
+        },
+        "document_types_processing_days_check": {
+          "name": "document_types_processing_days_check",
+          "value": "\"document_types\".\"processing_days\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.email_verification_tokens": {
+      "name": "email_verification_tokens",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "code_hash": {
+          "name": "code_hash",
+          "type": "char(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "email_verification_tokens_user_id_users_id_fk": {
+          "name": "email_verification_tokens_user_id_users_id_fk",
+          "tableFrom": "email_verification_tokens",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "email_verification_tokens_code_hash_unique": {
+          "name": "email_verification_tokens_code_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code_hash"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "email_verification_tokens_attempts_check": {
+          "name": "email_verification_tokens_attempts_check",
+          "value": "\"email_verification_tokens\".\"attempts\" between 0 and 5"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.notifications": {
@@ -223,6 +409,12 @@
         "request_id": {
           "name": "request_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "comment_id": {
+          "name": "comment_id",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
@@ -315,6 +507,19 @@
           ],
           "onDelete": "cascade",
           "onUpdate": "no action"
+        },
+        "notifications_comment_id_request_comments_id_fk": {
+          "name": "notifications_comment_id_request_comments_id_fk",
+          "tableFrom": "notifications",
+          "tableTo": "request_comments",
+          "columnsFrom": [
+            "comment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -348,7 +553,7 @@
         },
         "currency": {
           "name": "currency",
-          "type": "varchar(3)",
+          "type": "char(3)",
           "primaryKey": false,
           "notNull": true
         },
@@ -361,20 +566,19 @@
         },
         "provider": {
           "name": "provider",
-          "type": "varchar(50)",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "provider_reference": {
           "name": "provider_reference",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "status": {
           "name": "status",
-          "type": "payment_status",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
           "notNull": true,
           "default": "'pending'"
@@ -440,7 +644,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "payments_confirmed_by_users_id_fk": {
@@ -468,7 +672,224 @@
         }
       },
       "policies": {},
+      "checkConstraints": {
+        "payments_amount_check": {
+          "name": "payments_amount_check",
+          "value": "\"payments\".\"amount\" >= 0"
+        },
+        "payments_status_check": {
+          "name": "payments_status_check",
+          "value": "\"payments\".\"status\" in ('pending', 'succeeded', 'failed', 'ref')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.request_comment_reads": {
+      "name": "request_comment_reads",
+      "schema": "",
+      "columns": {
+        "comment_id": {
+          "name": "comment_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "request_comment_reads_user_idx": {
+          "name": "request_comment_reads_user_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "comment_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "request_comment_reads_comment_id_request_comments_id_fk": {
+          "name": "request_comment_reads_comment_id_request_comments_id_fk",
+          "tableFrom": "request_comment_reads",
+          "tableTo": "request_comments",
+          "columnsFrom": [
+            "comment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "request_comment_reads_user_id_users_id_fk": {
+          "name": "request_comment_reads_user_id_users_id_fk",
+          "tableFrom": "request_comment_reads",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "request_comment_reads_comment_id_user_id_pk": {
+          "name": "request_comment_reads_comment_id_user_id_pk",
+          "columns": [
+            "comment_id",
+            "user_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.request_comments": {
+      "name": "request_comments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "bigint",
+          "primaryKey": true,
+          "notNull": true,
+          "identity": {
+            "type": "always",
+            "name": "request_comments_id_seq",
+            "schema": "public",
+            "increment": "1",
+            "startWith": "1",
+            "minValue": "1",
+            "maxValue": "9223372036854775807",
+            "cache": "1",
+            "cycle": false
+          }
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "author_id": {
+          "name": "author_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "visibility": {
+          "name": "visibility",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "comment": {
+          "name": "comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "request_comments_request_idx": {
+          "name": "request_comments_request_idx",
+          "columns": [
+            {
+              "expression": "request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "request_comments_request_id_requests_id_fk": {
+          "name": "request_comments_request_id_requests_id_fk",
+          "tableFrom": "request_comments",
+          "tableTo": "requests",
+          "columnsFrom": [
+            "request_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "request_comments_author_id_users_id_fk": {
+          "name": "request_comments_author_id_users_id_fk",
+          "tableFrom": "request_comments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "author_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "request_comments_visibility_check": {
+          "name": "request_comments_visibility_check",
+          "value": "\"request_comments\".\"visibility\" in ('requester', 'staff')"
+        },
+        "request_comments_comment_check": {
+          "name": "request_comments_comment_check",
+          "value": "char_length(\"request_comments\".\"comment\") between 1 and 2000"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.request_files": {
@@ -508,7 +929,7 @@
         },
         "mime_type": {
           "name": "mime_type",
-          "type": "varchar(100)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -520,7 +941,7 @@
         },
         "file_kind": {
           "name": "file_kind",
-          "type": "varchar(30)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -580,7 +1001,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "request_files_file_kind_check": {
+          "name": "request_files_file_kind_check",
+          "value": "\"request_files\".\"file_kind\" in ('supporting', 'fulfilled')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.request_reviews": {
@@ -701,20 +1127,9 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "bigint",
+          "type": "bigserial",
           "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "request_status_history_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
+          "notNull": true
         },
         "request_id": {
           "name": "request_id",
@@ -724,15 +1139,13 @@
         },
         "from_status": {
           "name": "from_status",
-          "type": "request_status",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
         "to_status": {
           "name": "to_status",
-          "type": "request_status",
-          "typeSchema": "public",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -818,6 +1231,13 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "display_code": {
+          "name": "display_code",
+          "type": "varchar(6)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "upper(lpad(to_hex(nextval('public.request_display_code_seq')), 6, '0'))"
+        },
         "requester_id": {
           "name": "requester_id",
           "type": "bigint",
@@ -836,7 +1256,7 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'submitted'"
+          "default": "'pending_review'"
         },
         "purpose": {
           "name": "purpose",
@@ -859,7 +1279,13 @@
         },
         "fee_currency": {
           "name": "fee_currency",
-          "type": "varchar(3)",
+          "type": "char(3)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "assigned_to": {
+          "name": "assigned_to",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
@@ -942,12 +1368,42 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "requests_assigned_to_users_id_fk": {
+          "name": "requests_assigned_to_users_id_fk",
+          "tableFrom": "requests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "assigned_to"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "requests_display_code_unique": {
+          "name": "requests_display_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "display_code"
+          ]
+        }
+      },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "requests_display_code_hex_chk": {
+          "name": "requests_display_code_hex_chk",
+          "value": "\"requests\".\"display_code\" ~ '^[0-9A-F]{6}$'"
+        },
+        "requests_fee_amount_check": {
+          "name": "requests_fee_amount_check",
+          "value": "\"requests\".\"fee_amount\" >= 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.retrievals": {
@@ -1095,7 +1551,7 @@
         },
         "name": {
           "name": "name",
-          "type": "varchar(50)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         }
@@ -1112,6 +1568,109 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.student_directory": {
+      "name": "student_directory",
+      "schema": "",
+      "columns": {
+        "student_id": {
+          "name": "student_id",
+          "type": "varchar(64)",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "first_name": {
+          "name": "first_name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_name": {
+          "name": "last_name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "middle_name": {
+          "name": "middle_name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "birthdate": {
+          "name": "birthdate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "student_directory_first_name_trgm_idx": {
+          "name": "student_directory_first_name_trgm_idx",
+          "columns": [
+            {
+              "expression": "lower(\"first_name\") gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "student_directory_middle_name_trgm_idx": {
+          "name": "student_directory_middle_name_trgm_idx",
+          "columns": [
+            {
+              "expression": "lower(\"middle_name\") gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        },
+        "student_directory_last_name_trgm_idx": {
+          "name": "student_directory_last_name_trgm_idx",
+          "columns": [
+            {
+              "expression": "lower(\"last_name\") gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1182,24 +1741,13 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "bigint",
+          "type": "bigserial",
           "primaryKey": true,
-          "notNull": true,
-          "identity": {
-            "type": "always",
-            "name": "users_id_seq",
-            "schema": "public",
-            "increment": "1",
-            "startWith": "1",
-            "minValue": "1",
-            "maxValue": "9223372036854775807",
-            "cache": "1",
-            "cycle": false
-          }
+          "notNull": true
         },
         "email": {
           "name": "email",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -1211,9 +1759,27 @@
         },
         "full_name": {
           "name": "full_name",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "student_id": {
+          "name": "student_id",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_phone": {
+          "name": "contact_phone",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_address": {
+          "name": "contact_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "stakeholder_type": {
           "name": "stakeholder_type",
@@ -1224,6 +1790,13 @@
         },
         "active": {
           "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "email_verified": {
+          "name": "email_verified",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -1244,8 +1817,54 @@
           "default": "now()"
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
+      "indexes": {
+        "users_student_id_unique": {
+          "name": "users_student_id_unique",
+          "columns": [
+            {
+              "expression": "student_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"users\".\"student_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "users_full_name_trgm_idx": {
+          "name": "users_full_name_trgm_idx",
+          "columns": [
+            {
+              "expression": "lower(\"full_name\") gin_trgm_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "gin",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "users_student_id_student_directory_student_id_fk": {
+          "name": "users_student_id_student_directory_student_id_fk",
+          "tableFrom": "users",
+          "tableTo": "student_directory",
+          "columnsFrom": [
+            "student_id"
+          ],
+          "columnsTo": [
+            "student_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "users_email_unique": {
@@ -1278,35 +1897,19 @@
         "gcash"
       ]
     },
-    "public.payment_status": {
-      "name": "payment_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "succeeded",
-        "failed",
-        "refunded"
-      ]
-    },
     "public.request_status": {
       "name": "request_status",
       "schema": "public",
       "values": [
-        "submitted",
-        "registrar_review",
-        "needs_information",
-        "registrar_approved",
-        "registrar_rejected",
-        "saso_review",
-        "saso_cleared",
-        "saso_rejected",
-        "awaiting_payment",
-        "payment_review",
+        "pending_review",
+        "on_hold",
+        "pending_payment",
+        "clearance_review",
         "paid",
         "processing",
-        "ready_for_retrieval",
+        "ready_for_pickup",
         "fulfilled",
-        "cancelled"
+        "rejected"
       ]
     },
     "public.retrieval_method": {
@@ -1356,7 +1959,18 @@
     }
   },
   "schemas": {},
-  "sequences": {},
+  "sequences": {
+    "public.request_display_code_seq": {
+      "name": "request_display_code_seq",
+      "schema": "public",
+      "increment": "1",
+      "startWith": "1",
+      "minValue": "1",
+      "maxValue": "16777215",
+      "cache": "1",
+      "cycle": false
+    }
+  },
   "roles": {},
   "policies": {},
   "views": {},

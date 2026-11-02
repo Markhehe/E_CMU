@@ -139,8 +139,16 @@ export function streamDataChanges(req: AuthenticatedRequest, res: Response) {
     res.write(": heartbeat\n\n");
   }, 25000);
 
-  res.on("close", () => {
+  let isCleanedUp = false;
+  const cleanupSubscriber = () => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
     clearInterval(heartbeat);
     subscribers.delete(subscriber);
+  };
+
+  req.on("close", () => {
+    if (res.destroyed || res.writableEnded) cleanupSubscriber();
   });
+  res.on("close", cleanupSubscriber);
 }

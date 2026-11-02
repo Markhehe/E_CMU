@@ -11,6 +11,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  pgSequence,
   primaryKey,
   serial,
   smallint,
@@ -67,6 +68,11 @@ export const notificationChannel = pgEnum("notification_channel", [
   "in_app",
   "email",
 ]);
+
+export const requestDisplayCodeSequence = pgSequence(
+  "request_display_code_seq",
+  { minValue: 1, maxValue: 16777215, startWith: 1 },
+);
 
 export const users = pgTable(
   "users",

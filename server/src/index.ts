@@ -17,7 +17,7 @@ app.use(
   } )
 );
 
-app.use(express.json({ limit: "8mb" }));
+app.use(express.json({ limit: "9mb" }));
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);

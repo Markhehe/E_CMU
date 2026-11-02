@@ -338,6 +338,8 @@ function RegistrationModal({ isOpen, onClose }) {
   });
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [hasAgreedToTerms, setHasAgreedToTerms] = useState(false);
+  const [hasAgreedToDataProtection, setHasAgreedToDataProtection] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState('');
   const [emailDeliveryIssue, setEmailDeliveryIssue] = useState(false);
   const [isResending, setIsResending] = useState(false);
@@ -348,6 +350,10 @@ function RegistrationModal({ isOpen, onClose }) {
 
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
+    if (!hasAgreedToTerms || !hasAgreedToDataProtection) {
+      addToast('Please confirm both agreements before creating an account.', 'error');
+      return;
+    }
     if (!regData.email.toLowerCase().endsWith('@cityofmalabonuniversity.edu.ph')) {
       addToast('Use your @cityofmalabonuniversity.edu.ph email address.', 'error');
       return;
@@ -392,6 +398,8 @@ function RegistrationModal({ isOpen, onClose }) {
 
   const handleModalClose = () => {
     setRegData({ email: '', password: '', confirmPassword: '' });
+    setHasAgreedToTerms(false);
+    setHasAgreedToDataProtection(false);
     setConfirmationEmail('');
     setEmailVerified(false);
     setEmailDeliveryIssue(false);
@@ -482,7 +490,36 @@ function RegistrationModal({ isOpen, onClose }) {
             />
           </div>
 
-          <button type="submit" className="auth-button" disabled={isRegistering}>
+          <div className="registration-consent-group">
+            <label className="registration-consent" htmlFor="acceptTerms">
+              <input
+                id="acceptTerms"
+                type="checkbox"
+                checked={hasAgreedToTerms}
+                onChange={(e) => setHasAgreedToTerms(e.target.checked)}
+                required
+                disabled={isRegistering}
+              />
+              <span>I agree to the Terms of Service.</span>
+            </label>
+            <label className="registration-consent" htmlFor="acceptDataProtection">
+              <input
+                id="acceptDataProtection"
+                type="checkbox"
+                checked={hasAgreedToDataProtection}
+                onChange={(e) => setHasAgreedToDataProtection(e.target.checked)}
+                required
+                disabled={isRegistering}
+              />
+              <span>I acknowledge and agree to the Data Protection Agreement.</span>
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            className="auth-button"
+            disabled={isRegistering || !hasAgreedToTerms || !hasAgreedToDataProtection}
+          >
             {isRegistering ? 'CREATING...' : 'CREATE ACCOUNT'}
           </button>
         </form>

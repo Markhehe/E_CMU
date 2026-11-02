@@ -186,7 +186,7 @@ function StudentClearancePanel({
           </p>
           <form onSubmit={handleSubmit}>
             <label className="settings-label" htmlFor={clearanceFileInputId}>
-              Clearance copy (PDF, PNG, JPG, or WebP; up to 5 MB)
+              Clearance copy (PDF, PNG, JPG, or WebP; up to 3 MB)
             </label>
             <input
               id={clearanceFileInputId}

@@ -16,6 +16,7 @@ import {
   userRoles,
 } from "../../db/schema.js";
 import { requireAuth } from "../../middleware/auth.js";
+import { imageDataUrlSchema, paymentProofImagesSchema } from "./validation.js";
 import {
   scheduleEmailNotification,
   sendPaymentReceivedEmail,
@@ -230,20 +231,8 @@ const paymentSchema = z
   });
 
 const paymentProofSchema = z.object({
-  receiptDataUrl: z
-    .string()
-    .max(3_600_000)
-    .regex(
-      /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
-      "Upload a PNG, JPEG, or WebP receipt image",
-    ),
-  requestCopyDataUrl: z
-    .string()
-    .max(3_600_000)
-    .regex(
-      /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
-      "Upload a PNG, JPEG, or WebP copy of the printed request",
-    ),
+  receiptDataUrl: imageDataUrlSchema,
+  requestCopyDataUrl: imageDataUrlSchema,
   orNumber: z.string().trim().min(1).max(64),
   paymentReference: z.string().trim().max(255).optional(),
 });
@@ -252,10 +241,7 @@ const paymentMethodSchema = z.object({
   paymentMethod: z.literal("Pay at the Office"),
 });
 const clearanceUploadSchema = z.object({
-  fileData: z.string().max(7_000_000).regex(
-    /^data:(?:application\/pdf|image\/(?:png|jpeg|webp));base64,[A-Za-z0-9+/]+={0,2}$/,
-    "Upload a PDF, PNG, JPEG, or WebP clearance file",
-  ),
+  fileData: imageDataUrlSchema,
   originalName: z.string().trim().min(1).max(255),
 });
 const clearanceReviewSchema = z.object({
@@ -1726,6 +1712,12 @@ router.post(
   "/:id/payment-proof",
   requireAuth,
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    if (!paymentProofImagesSchema.safeParse(req.body).success) {
+      return res.status(400).json({
+        error: "Both cash receipt and printed request copy are required",
+      });
+    }
+
     const client = await pool.connect();
     try {
       const { id } = requestIdSchema.parse(req.params);
