@@ -2,11 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db/index.js";
-<<<<<<< HEAD
-import { users } from "../db/schema.js";
-=======
 import { roles, userRoles, users } from "../db/schema.js";
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 
 
 
@@ -15,10 +11,7 @@ export type AuthenticatedUser = {
   email: string;
   fullName: string;
   stakeholderType: "student" | "professor" | "other";
-<<<<<<< HEAD
-=======
   roles: string[];
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 };
 
 declare global {
@@ -78,9 +71,6 @@ export async function requireAuth(
       });
     }
 
-<<<<<<< HEAD
-    req.user = result[0];
-=======
     const assignedRoles = await db
       .select({ name: roles.name })
       .from(userRoles)
@@ -91,7 +81,6 @@ export async function requireAuth(
       ...result[0],
       roles: assignedRoles.map(({ name }) => name),
     };
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     return next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
@@ -108,8 +97,6 @@ export async function requireAuth(
 
     return next(error);
   }
-<<<<<<< HEAD
-=======
 }
 
 export function requireRole(...allowedRoles: string[]) {
@@ -128,5 +115,4 @@ export function requireRole(...allowedRoles: string[]) {
     }
     return next();
   };
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 }

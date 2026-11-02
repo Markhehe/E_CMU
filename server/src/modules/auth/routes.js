@@ -1,47 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
-<<<<<<< HEAD
-=======
 import { Buffer } from "node:buffer";
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { createAccessToken, setAuthCookie } from "../../utils/tokens.js";
 import { requireAuth } from "../../middleware/auth.js";
-<<<<<<< HEAD
-
-const router = Router();
-const credentials = z.object({
-    email: z.string().email(),
-    password: z.string().min(8),
-    fullName: z.string().min(2),
-    stakeholderType: z.enum(["student", "professor", "other"]),
-});
-
-router.post("/register", async (req, res, next) => {
-    try {
-        const data = credentials.parse(req.body);
-        const passwordHash = await bcrypt.hash(data.password, 12);
-        
-        const result = await pool.query(
-            `INSERT INTO users (email, password_hash, full_name, stakeholder_type)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id, email, full_name, stakeholder_type`,
-            [data.email.toLowerCase(), passwordHash, data.fullName, data.stakeholderType]
-        );
-        
-        const user = result.rows[0];
-        const role = await pool.query("SELECT id FROM roles WHERE name = 'requester'");
-        await pool.query(
-            "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)",
-            [user.id, role.rows[0].id]
-        );
-        
-        setAuthCookie(res, createAccessToken(user));
-        res.status(201).json({ user });
-    } catch (error) {
-=======
 import { sendConfirmationEmail } from "../../services/email.js";
 
 const router = Router();
@@ -154,13 +118,10 @@ router.post("/register", async (req, res, next) => {
         });
     } catch (error) {
         if (client) await client.query("ROLLBACK");
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
         if (error.code === "23505") {
             return res.status(409).json({ error: "Email is already registered" });
         }
         next(error);
-<<<<<<< HEAD
-=======
     } finally {
         client?.release();
     }
@@ -324,7 +285,6 @@ router.post("/resend-confirmation", async (req, res, next) => {
         return next(error);
     } finally {
         client?.release();
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     }
 });
 
@@ -334,12 +294,6 @@ router.post("/login", async (req, res, next) => {
             email: z.string().email(),
             password: z.string(),
         }).parse(req.body);
-<<<<<<< HEAD
-        
-        const result = await pool.query(
-            "SELECT * FROM users WHERE email = $1 AND active = TRUE",
-=======
-
         const result = await pool.query(
             `SELECT u.*,
                 directory.birthdate,
@@ -351,23 +305,12 @@ router.post("/login", async (req, res, next) => {
              LEFT JOIN roles r ON r.id = ur.role_id
              WHERE u.email = $1 AND u.active = TRUE
              GROUP BY u.id, directory.birthdate`,
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
             [data.email.toLowerCase()]
         );
 
         if (result.rowCount === 0) {
             return res.status(401).json({ error: "Invalid credentials" });
         }
-<<<<<<< HEAD
-    
-        const user = result.rows[0];
-        const valid = await bcrypt.compare(data.password, user.password_hash);
-        if (!valid) return res.status(401).json({ error: "Invalid credentials" });
-    
-        setAuthCookie(res, createAccessToken(user));
-        res.json({ user: { id: user.id, email: user.email, fullName: user.full_name } });
-=======
-
         const user = result.rows[0];
         const valid = await bcrypt.compare(data.password, user.password_hash);
         if (!valid) return res.status(401).json({ error: "Invalid credentials" });
@@ -389,7 +332,6 @@ router.post("/login", async (req, res, next) => {
                 roles: user.roles,
             },
         });
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     } catch (error) {
         next(error);
     }
@@ -400,8 +342,6 @@ router.post("/logout", (_req, res) => {
  res.status(204).end();
 });
 
-<<<<<<< HEAD
-=======
 router.patch("/profile", requireAuth, async (req, res, next) => {
     const parsed = z.object({
         contactPhone: z.string().trim().max(40).nullable().optional(),
@@ -455,7 +395,6 @@ router.patch("/profile", requireAuth, async (req, res, next) => {
     }
 });
 
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 router.get("/me", requireAuth, (req, res) => {
      res.json({ user: req.user });
 });

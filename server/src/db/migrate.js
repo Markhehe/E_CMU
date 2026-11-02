@@ -24,21 +24,9 @@ for (const file of files) {
         "SELECT 1 FROM migrations WHERE name = $1",
         [file]
     );
-<<<<<<< HEAD
-    
     if (alreadyExecuted.rowCount > 0) continue;
-    
     const sql = await fs.readFile(path.join(migrationsDirectory, file), "utf8");
     const client = await pool.connect();
-    
-=======
-
-    if (alreadyExecuted.rowCount > 0) continue;
-
-    const sql = await fs.readFile(path.join(migrationsDirectory, file), "utf8");
-    const client = await pool.connect();
-
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     try {
         await client.query("BEGIN");
         await client.query(sql);

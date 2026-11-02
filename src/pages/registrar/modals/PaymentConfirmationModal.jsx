@@ -76,9 +76,9 @@ export default function PaymentConfirmationModal({ isOpen, onClose, request, onS
               <p>
                 Uploaded request code: <strong>{request.displayId || request.id}</strong>
               </p>
-              {request.paymentReference && (
+              {request.orNumber && (
                 <p>
-                  Receipt/reference number: <strong>{request.paymentReference}</strong>
+                  O.R. No.: <strong>{request.orNumber}</strong>
                 </p>
               )}
               

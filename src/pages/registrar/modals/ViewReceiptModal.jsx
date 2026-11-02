@@ -8,9 +8,9 @@ export default function ViewReceiptModal({ isOpen, onClose, request }) {
           <p className="modal-text" style={{ margin: 0, textAlign: 'center' }}>
             Payment proof for request <strong>{request.displayId || request.id}</strong>
           </p>
-          {request.paymentReference && (
+          {request.orNumber && (
             <p className="modal-text" style={{ margin: 0 }}>
-              Payment reference: <strong>{request.paymentReference}</strong>
+              O.R. No.: <strong>{request.orNumber}</strong>
             </p>
           )}
           

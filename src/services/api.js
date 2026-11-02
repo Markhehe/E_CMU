@@ -108,6 +108,8 @@ export function formatRequest(request = {}) {
 
   const paymentReference = additionalDetails.paymentReference || additionalDetails.payment_reference || 
                            request.paymentReference || request.payment_reference || null;
+  const orNumber = additionalDetails.orNumber || additionalDetails.or_number ||
+                   request.orNumber || request.or_number || null;
 
   const paymentMethod = additionalDetails.paymentMethod || additionalDetails.payment_method || 
                         request.paymentMethod || request.payment_method || 'Not recorded';
@@ -133,6 +135,7 @@ export function formatRequest(request = {}) {
     status: STATUS_LABELS[rawStatus] || rawStatus.toUpperCase(),
     paymentMethod,
     paymentReference,
+    orNumber,
     requestCopyUrl: additionalDetails.requestCopyUrl || additionalDetails.request_copy_url || null,
     hasReceipt,
     receiptUrl,
@@ -303,7 +306,7 @@ export const DocumentService = {
   },
 
   // UI validation removed. API layer strictly processes the data.
-  async submitPaymentDetails(requestId, { paymentReference, receiptFile, requestCopyFile, trackingCode }) {
+  async submitPaymentDetails(requestId, { paymentReference, receiptFile, requestCopyFile, orNumber }) {
     const receiptDataUrl = await readFileAsDataUrl(receiptFile);
     const requestCopyDataUrl = await readFileAsDataUrl(requestCopyFile);
     
@@ -312,9 +315,9 @@ export const DocumentService = {
       body: JSON.stringify({
         paymentMethod: 'Pay at the Office',
         paymentReference,
+        orNumber,
         receiptDataUrl,
         requestCopyDataUrl,
-        trackingCode,
       }),
     });
   },

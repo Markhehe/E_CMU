@@ -348,7 +348,7 @@ function RegistrarDashboard() {
                         </button>
                       )}
 
-                      {['ready_for_retrieval', 'ready'].includes(req.rawStatus) && (
+                      {['ready_for_pickup', 'ready_for_retrieval', 'ready'].includes(req.rawStatus) && (
                         <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); handlePickup(req.id); }}>
                           Record Pickup
                         </button>

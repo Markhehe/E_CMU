@@ -7,7 +7,7 @@ export default function UploadPaymentModal({ isOpen, onClose, request, onSuccess
   const [selectedFile, setSelectedFile] = useState(null);
   const [requestCopyFile, setRequestCopyFile] = useState(null);
   const [paymentReference, setPaymentReference] = useState('');
-  const [trackingCode, setTrackingCode] = useState(request?.displayId || '');
+  const [orNumber, setOrNumber] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const { addToast } = useToast();
 
@@ -38,13 +38,19 @@ export default function UploadPaymentModal({ isOpen, onClose, request, onSuccess
     e.preventDefault();
     if (!selectedFile || !requestCopyFile || !request) return;
 
+    const enteredOrNumber = orNumber.trim();
+    if (!enteredOrNumber) {
+      addToast('Enter the O.R. No. printed on your receipt.', 'error');
+      return;
+    }
+
     setIsUploading(true);
     try {
       await DocumentService.submitPaymentDetails(request.id, {
         paymentReference,
         receiptFile: selectedFile,
         requestCopyFile,
-        trackingCode,
+        orNumber: enteredOrNumber,
       });
       addToast('Payment receipt submitted for Registrar verification.', 'success');
       
@@ -52,6 +58,7 @@ export default function UploadPaymentModal({ isOpen, onClose, request, onSuccess
       setSelectedFile(null);
       setRequestCopyFile(null);
       setPaymentReference('');
+      setOrNumber('');
       if (onSuccess) await onSuccess();
       onClose();
     } catch (error) {
@@ -67,14 +74,14 @@ export default function UploadPaymentModal({ isOpen, onClose, request, onSuccess
         <form className="modal-form" onSubmit={handleUploadSubmit}>
           <p className="modal-text">Pay cash at the Finance Office. Upload both the receipt and the printed request form.</p>
           
-          <label className="auth-label" htmlFor="trackingCode">Request tracking code</label>
+          <label className="auth-label" htmlFor="orNumber">O.R. No.</label>
           <input
-            id="trackingCode"
+            id="orNumber"
             className="auth-input"
-            value={trackingCode}
-            onChange={(e) => setTrackingCode(e.target.value.toUpperCase())}
-            maxLength={6}
-            pattern="[A-Fa-f0-9]{6}"
+            value={orNumber}
+            onChange={(e) => setOrNumber(e.target.value)}
+            maxLength={64}
+            title="Enter the O.R. No. printed on your cash receipt."
             required
             disabled={isUploading}
           />

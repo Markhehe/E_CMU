@@ -6,30 +6,16 @@ import {
 } from "express";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
-<<<<<<< HEAD
-import { db } from "../../db/index.js";
-import {
-  payments,
-  requestReviews,
-  requestStatusHistory,
-  requests,
-=======
 import { db, pool } from "../../db/index.js";
 import {
   requestReviews,
   requestStatusHistory,
   requests,
   notifications,
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
   roles,
   userRoles,
 } from "../../db/schema.js";
 import { requireAuth } from "../../middleware/auth.js";
-<<<<<<< HEAD
-
-const router = Router();
-
-=======
 import {
   scheduleEmailNotification,
   sendPaymentReceivedEmail,
@@ -197,22 +183,10 @@ router.post(
   },
 );
 
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 const requestIdSchema = z.object({
   id: z.string().uuid(),
 });
 
-<<<<<<< HEAD
-const reviewSchema = z.object({
-  decision: z.enum(["approved", "rejected", "needs_information"]),
-  comment: z.string().trim().max(2000).optional(),
-});
-
-const paymentSchema = z
-  .object({
-    method: z.enum(["cash", "gcash"]),
-    amount: z.coerce.number().finite().positive(),
-=======
 const directRequestStatuses = [
   "pending_review",
   "on_hold",
@@ -245,7 +219,6 @@ const paymentSchema = z
   .object({
     method: z.literal("cash"),
     amount: z.coerce.number().finite().nonnegative(),
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     currency: z
       .string()
       .trim()
@@ -254,27 +227,6 @@ const paymentSchema = z
     status: z.enum(["pending", "succeeded", "failed"]),
     providerReference: z.string().trim().max(255).optional(),
     notes: z.string().trim().max(2000).optional(),
-<<<<<<< HEAD
-  })
-  .superRefine((value, context) => {
-    if (value.method === "gcash" && !value.providerReference) {
-      context.addIssue({
-        code: "custom",
-        path: ["providerReference"],
-        message: "A GCash reference number is required",
-      });
-    }
-  });
-
-type WorkflowRequest = Request & {
-  user?: {
-    id: number;
-    email: string;
-    fullName: string;
-    stakeholderType: "student" | "professor" | "other";
-  };
-};
-=======
   });
 
 const paymentProofSchema = z.object({
@@ -292,7 +244,7 @@ const paymentProofSchema = z.object({
       /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
       "Upload a PNG, JPEG, or WebP copy of the printed request",
     ),
-  trackingCode: z.string().trim().regex(/^[A-Fa-f0-9]{6}$/),
+  orNumber: z.string().trim().min(1).max(64),
   paymentReference: z.string().trim().max(255).optional(),
 });
 
@@ -329,7 +281,6 @@ const walkInRequestSchema = z.object({
 });
 
 type WorkflowRequest = Request;
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 
 function requireRole(...allowedRoles: string[]) {
   return async (req: WorkflowRequest, res: Response, next: NextFunction) => {
@@ -360,35 +311,6 @@ function requireRole(...allowedRoles: string[]) {
   };
 }
 
-<<<<<<< HEAD
-async function getRequestForUpdate(requestId: string) {
-  const [request] = await db
-    .select({
-      id: requests.id,
-      status: requests.status,
-      feeAmount: requests.feeAmount,
-      feeCurrency: requests.feeCurrency,
-      requesterId: requests.requesterId,
-    })
-    .from(requests)
-    .where(eq(requests.id, requestId))
-    .limit(1);
-
-  return request;
-}
-
-const registrarStatusByDecision = {
-  approved: "registrar_approved",
-  rejected: "registrar_rejected",
-  needs_information: "needs_information",
-} as const;
-
-const sasoStatusByDecision = {
-  approved: "saso_cleared",
-  rejected: "saso_rejected",
-  needs_information: "needs_information",
-} as const;
-=======
 const registrarStatusByDecision = {
   approved: "pending_payment",
   rejected: "rejected",
@@ -519,7 +441,6 @@ router.patch(
     }
   },
 );
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 
 async function insertStatusChange(
   tx: any,
@@ -536,13 +457,8 @@ async function insertStatusChange(
 
   await tx.insert(requestStatusHistory).values({
     requestId,
-<<<<<<< HEAD
-    fromStatus: fromStatus as any,
-    toStatus: toStatus as any,
-=======
     fromStatus,
     toStatus,
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     changedBy,
     comment: comment ?? null,
   });
@@ -550,48 +466,11 @@ async function insertStatusChange(
 
 async function createReview(
   requestId: string,
-<<<<<<< HEAD
-  stage: "registrar" | "saso",
-=======
   stage: "registrar",
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
   decision: "approved" | "rejected" | "needs_information",
   comment: string | undefined,
   reviewerId: number,
 ) {
-<<<<<<< HEAD
-  const request = await getRequestForUpdate(requestId);
-
-  if (!request) {
-    return { error: "Request not found", statusCode: 404 as const };
-  }
-
-  const allowedStatuses =
-    stage === "registrar"
-      ? ["submitted", "registrar_review", "needs_information"]
-      : ["registrar_approved", "saso_review"];
-
-  if (!allowedStatuses.includes(request.status)) {
-    return {
-      error: `Request cannot receive a ${stage} decision while its status is ${request.status}`,
-      statusCode: 409 as const,
-    };
-  }
-
-  const nextStatus =
-    stage === "registrar"
-      ? registrarStatusByDecision[decision]
-      : sasoStatusByDecision[decision];
-
-  const finalStatus =
-    stage === "registrar" && decision === "approved"
-      ? "saso_review"
-      : stage === "saso" && decision === "approved"
-        ? "awaiting_payment"
-        : nextStatus;
-
-  const result = await db.transaction(async (tx) => {
-=======
   return db.transaction(async (tx) => {
     const [request] = await tx
       .select({
@@ -621,8 +500,6 @@ async function createReview(
 
     const finalStatus =
       registrarStatusByDecision[decision];
-
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     const [review] = await tx
       .insert(requestReviews)
       .values({
@@ -636,32 +513,17 @@ async function createReview(
 
     await tx
       .update(requests)
-<<<<<<< HEAD
-      .set({ status: finalStatus as any, updatedAt: new Date() })
-=======
       .set({ status: finalStatus, updatedAt: new Date() })
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
       .where(eq(requests.id, requestId));
 
     await tx.insert(requestStatusHistory).values({
       requestId,
-<<<<<<< HEAD
-      fromStatus: request.status as any,
-      toStatus: finalStatus as any,
-=======
       fromStatus: request.status,
       toStatus: finalStatus,
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
       changedBy: reviewerId,
       comment: comment ?? `${stage} decision: ${decision}`,
     });
 
-<<<<<<< HEAD
-    return review;
-  });
-
-  return { result };
-=======
     if (decision === "approved") {
       await tx.insert(notifications).values({
         userId: request.requesterId,
@@ -684,7 +546,6 @@ async function createReview(
 
     return { result: review };
   });
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
 }
 
 router.post(
@@ -714,31 +575,6 @@ router.post(
   },
 );
 
-<<<<<<< HEAD
-router.post(
-  "/:id/saso-clearance",
-  requireAuth,
-  requireRole("saso"),
-  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
-    try {
-      const { id } = requestIdSchema.parse(req.params);
-      const input = reviewSchema.parse(req.body);
-      const result = await createReview(
-        id,
-        "saso",
-        input.decision,
-        input.comment,
-        req.user!.id,
-      );
-
-      if ("error" in result) {
-        return res.status(result.statusCode ?? 500).json({ error: result.error });
-      }
-
-      return res.status(201).json({ clearance: result.result });
-    } catch (error) {
-      next(error);
-=======
 router.get(
   "/:id/comments",
   requireAuth,
@@ -1933,12 +1769,6 @@ router.post(
         });
         return;
       }
-      if (input.trackingCode.toUpperCase() !== request.display_code) {
-        await client.query("ROLLBACK");
-        res.status(400).json({ error: "Tracking code does not match this request." });
-        return;
-      }
-
       const uploadedAt = new Date().toISOString();
       const nextStatus = "pending_payment";
       await client.query(
@@ -1952,6 +1782,7 @@ router.post(
           JSON.stringify({
             receiptUrl: input.receiptDataUrl,
             requestCopyUrl: input.requestCopyDataUrl,
+            orNumber: input.orNumber,
             paymentReference: input.paymentReference || null,
             paymentSentAt: uploadedAt,
           }),
@@ -1984,6 +1815,7 @@ router.post(
       res.status(201).json({
         receiptUrl: input.receiptDataUrl,
         requestCopyUrl: input.requestCopyDataUrl,
+        orNumber: input.orNumber,
         paymentReference: input.paymentReference || null,
         paymentSentAt: uploadedAt,
         status: nextStatus,
@@ -1993,7 +1825,6 @@ router.post(
       next(error);
     } finally {
       client.release();
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     }
   },
 );
@@ -2001,87 +1832,6 @@ router.post(
 router.post(
   "/:id/payments",
   requireAuth,
-<<<<<<< HEAD
-  requireRole("finance"),
-  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
-    try {
-      const { id } = requestIdSchema.parse(req.params);
-      const input = paymentSchema.parse(req.body);
-      const request = await getRequestForUpdate(id);
-
-      if (!request) {
-        return res.status(404).json({ error: "Request not found" });
-      }
-
-      if (!["awaiting_payment", "payment_review"].includes(request.status)) {
-        return res.status(409).json({
-          error: `Payment cannot be recorded while request status is ${request.status}`,
-        });
-      }
-
-      if (
-        request.feeAmount !== null &&
-        Number(request.feeAmount) !== input.amount
-      ) {
-        return res.status(400).json({
-          error: "Payment amount must match the approved request fee",
-          expectedAmount: request.feeAmount,
-          receivedAmount: input.amount,
-        });
-      }
-
-      if (request.feeCurrency && request.feeCurrency !== input.currency) {
-        return res.status(400).json({
-          error: "Payment currency must match the request currency",
-          expectedCurrency: request.feeCurrency,
-          receivedCurrency: input.currency,
-        });
-      }
-
-      const paymentResult = await db.transaction(async (tx) => {
-        const [payment] = await tx
-          .insert(payments)
-          .values({
-            requestId: id,
-            amount: input.amount.toFixed(2),
-            currency: input.currency,
-            method: input.method,
-            provider: input.method === "gcash" ? "GCash" : null,
-            providerReference: input.providerReference ?? null,
-            status: input.status,
-            confirmedBy: input.status === "succeeded" ? req.user!.id : null,
-            notes: input.notes ?? null,
-            paidAt: input.status === "succeeded" ? new Date() : null,
-          })
-          .returning();
-
-        const nextStatus =
-          input.status === "succeeded"
-            ? "paid"
-            : input.status === "pending"
-              ? "payment_review"
-              : "awaiting_payment";
-
-        await tx
-          .update(requests)
-          .set({ status: nextStatus, updatedAt: new Date() })
-          .where(eq(requests.id, id));
-
-        await tx.insert(requestStatusHistory).values({
-          requestId: id,
-          fromStatus: request.status as any,
-          toStatus: nextStatus as any,
-          changedBy: req.user!.id,
-          comment: input.notes ?? `Finance payment status: ${input.status}`,
-        });
-
-        return payment;
-      });
-
-      return res.status(201).json({ payment: paymentResult });
-    } catch (error) {
-      next(error);
-=======
   requireRole("registrar"),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const client = await pool.connect();
@@ -2286,7 +2036,6 @@ router.post(
       next(error);
     } finally {
       client.release();
->>>>>>> 9cda8ed7ba365859a95d9877d9267ee00b592b26
     }
   },
 );
