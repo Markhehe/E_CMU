@@ -13,8 +13,8 @@ import RequestCommentsModal from '../../components/ui/RequestCommentsModal';
 import Modal from '../../components/ui/Modal';
 import TableSkeleton from '../../components/ui/TableSkeleton';
 import TableEmptyState from '../../components/ui/TableEmptyState';
-import RequestDisplaySelect from '../../components/ui/RequestDisplaySelect';
 import RequestPagination from '../../components/ui/RequestPagination';
+import StudentActiveDocumentsPanel from '../../components/ui/StudentActiveDocumentsPanel';
 import { useRequestDisplay } from '../../hooks/useRequestDisplay';
 import CreateRequest from './CreateRequest';
 
@@ -40,7 +40,13 @@ function Dashboard() {
     deletePendingClearance,
   } = useStudentClearance();
   
-  const { requests, isLoading, refreshRequests, markCommentsRead } = useRequests();
+  const {
+    requests,
+    isLoading,
+    refreshRequests,
+    markCommentsRead,
+    requestEtaUpdate,
+  } = useRequests();
   const { openMenuId, setOpenMenuId, menuCoords, toggleMenu } = useActionMenu();
 
   // Modal State Management
@@ -51,6 +57,8 @@ function Dashboard() {
   const [commentingRequest, setCommentingRequest] = useState(null);
   const [focusCommentId, setFocusCommentId] = useState(null);
   const [notificationDetails, setNotificationDetails] = useState(null);
+  const [overdueRequest, setOverdueRequest] = useState(null);
+  const [isRequestingEta, setIsRequestingEta] = useState(false);
   const [isCreateRequestOpen, setIsCreateRequestOpen] = useState(false);
   const [isClearanceModalOpen, setIsClearanceModalOpen] = useState(false);
 
@@ -94,6 +102,7 @@ function Dashboard() {
       setViewingRequest(null);
       setCommentingRequest(null);
       setNotificationDetails(null);
+      setOverdueRequest(null);
       setViewingReceiptRequest(null);
       setPaymentRequest(null);
       setIsCreateRequestOpen(false);
@@ -107,6 +116,8 @@ function Dashboard() {
         if (notification.type === 'request_comment') {
           setFocusCommentId(notification.commentId);
           setCommentingRequest(request);
+        } else if (notification.type === 'document_overdue') {
+          setOverdueRequest(request);
         } else {
           setViewingRequest(request);
         }
@@ -120,14 +131,13 @@ function Dashboard() {
 
   const {
     mode,
-    setMode,
     visibleRequests,
     currentPage,
     totalPages,
     requestsPerPage,
     setCurrentPage,
     tableWrapperRef,
-  } = useRequestDisplay(studentRequests, 'student', 5, 'pagination');
+  } = useRequestDisplay(studentRequests, 'student-pagination', 5, 'pagination');
 
   const activeMenuRequest = studentRequests.find(req => req.id === openMenuId);
 
@@ -145,13 +155,24 @@ function Dashboard() {
     setOpenMenuId(null);
   };
 
+  const handleRequestEtaUpdate = async () => {
+    if (!overdueRequest || isRequestingEta) return;
+    setIsRequestingEta(true);
+    try {
+      const result = await requestEtaUpdate(overdueRequest.id);
+      if (result) setOverdueRequest(null);
+    } finally {
+      setIsRequestingEta(false);
+    }
+  };
+
   return (
     <div className="dashboard-page student-dashboard-page">
       <header className="dashboard-header-container">
         <div className="header-content">
           <h1 className="dashboard-title">Student Dashboard</h1>
           <p className="dashboard-subtext">Track the status of your documents, payments, and clearances.</p>
-          <p className="header-note">* Note: Clearance requirements vary by document.</p>
+          <p className="header-note">* Note: This portal assumes that online payment is available for the finance office and a method of delivery is available.</p>
         </div>
 
         <div className="header-actions">
@@ -164,22 +185,28 @@ function Dashboard() {
           >
             + Create a Document Request
           </button>
-          <RequestDisplaySelect mode={mode} onChange={setMode} />
         </div>
       </header>
 
-      <StudentClearancePanel
-        clearance={clearance}
-        isLoading={isClearanceLoading}
-        isUploading={isClearanceUploading}
-        isDeleting={isClearanceDeleting}
-        onSubmit={submitClearance}
-        onDelete={deletePendingClearance}
-        selectedFile={selectedClearanceFile}
-        selectedImagePreview={selectedClearancePreview}
-        fileInputKey={clearanceFileInputKey}
-        onSelectedFileChange={handleClearanceFileChange}
-      />
+      <div className="student-dashboard-overview">
+        <StudentClearancePanel
+          clearance={clearance}
+          isLoading={isClearanceLoading}
+          isUploading={isClearanceUploading}
+          isDeleting={isClearanceDeleting}
+          onSubmit={submitClearance}
+          onDelete={deletePendingClearance}
+          selectedFile={selectedClearanceFile}
+          selectedImagePreview={selectedClearancePreview}
+          fileInputKey={clearanceFileInputKey}
+          onSelectedFileChange={handleClearanceFileChange}
+        />
+        <StudentActiveDocumentsPanel
+          requests={studentRequests}
+          onViewDetails={handleViewDetails}
+          onViewOverdue={setOverdueRequest}
+        />
+      </div>
 
       <p className="table-scroll-hint">Scroll sideways to view all columns</p>
       <div
@@ -318,9 +345,40 @@ function Dashboard() {
         />
       </Modal>
 
+      <Modal
+        isOpen={Boolean(overdueRequest)}
+        onClose={() => setOverdueRequest(null)}
+        title="Document is overdue"
+        maxWidth="520px"
+      >
+        {overdueRequest && (
+          <div className="student-overdue-details">
+            <p>
+              The estimated time of availability for <strong>{overdueRequest.docType}</strong>
+              {' '}({overdueRequest.displayId}) has passed, and the document has not been marked ready.
+            </p>
+            {overdueRequest.etaUpdateRequestedAt ? (
+              <p className="student-overdue-requested" role="status">
+                Your request for an ETA update has been sent to the Registrar.
+              </p>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleRequestEtaUpdate}
+                disabled={isRequestingEta}
+              >
+                {isRequestingEta ? 'Sending request...' : 'Request for ETA update'}
+              </button>
+            )}
+          </div>
+        )}
+      </Modal>
+
       <Modal isOpen={isCreateRequestOpen} onClose={() => setIsCreateRequestOpen(false)} title="Create a Document Request" maxWidth="700px">
         <div className="request-create-modal">
           <CreateRequest embedded onRequestCreated={refreshRequests} clearanceState={{ clearance, isLoading: isClearanceLoading, isUploading: isClearanceUploading, isDeleting: isClearanceDeleting, isVerified: hasVerifiedClearance, submitClearance, deletePendingClearance, selectedFile: selectedClearanceFile, selectedImagePreview: selectedClearancePreview, fileInputKey: clearanceFileInputKey, onSelectedFileChange: handleClearanceFileChange }} />
+          <p className="request-review-note">Note: Wait for the Registrar to review your request.</p>
         </div>
       </Modal>
       

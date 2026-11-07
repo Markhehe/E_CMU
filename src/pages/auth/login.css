@@ -153,6 +153,19 @@
   text-align: left;
 }
 
+.registration-disclaimer {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(238, 168, 64, 0.5);
+  border-left: 4px solid var(--honey-bronze);
+  border-radius: var(--radius-sm);
+  background-color: var(--parchment);
+  color: var(--imperial-blue);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  text-align: left;
+}
+
 .registration-consent {
   display: flex;
   align-items: flex-start;

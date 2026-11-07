@@ -37,6 +37,10 @@ function PageHeader({ onMenuClick }) {
       title: 'Payment proofs',
       types: ['registrar_payment_proof_submitted'],
     },
+    {
+      title: 'Overdue ETA update requests',
+      types: ['registrar_eta_update_requested'],
+    },
   ].map((group) => ({
     ...group,
     count: notifications.filter((notification) => group.types.includes(notification.type)).length,
@@ -304,7 +308,7 @@ function PageHeader({ onMenuClick }) {
                   <p className="header-notifications-state" role="status">Loading notifications...</p>
                 ) : notifications.length === 0 ? (
                   <p className="header-notifications-state">
-                    {isRegistrar ? 'No new requests, clearance submissions, or payment proofs.' : 'You’re all caught up.'}
+                    {isRegistrar ? 'No new requests, clearance submissions, payment proofs, or ETA update requests.' : 'You’re all caught up.'}
                   </p>
                 ) : isRegistrar ? (
                   <div className="registrar-inbox-summary">
@@ -315,7 +319,9 @@ function PageHeader({ onMenuClick }) {
                       const isClearanceGroup = group.types.includes('registrar_clearance_submitted');
                       const statusFilter = group.types.includes('registrar_payment_proof_submitted')
                         ? 'PENDING PAYMENT'
-                        : 'PENDING REVIEW';
+                        : group.types.includes('registrar_eta_update_requested')
+                          ? 'OVERDUE'
+                          : 'PENDING REVIEW';
 
                       return (
                         <Link

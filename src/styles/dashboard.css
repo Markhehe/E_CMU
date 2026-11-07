@@ -37,12 +37,14 @@
 
 .registrar-dashboard-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
 
 .registrar-header-content {
+  flex: 1 1 18rem;
   min-width: 0;
 }
 
@@ -55,9 +57,10 @@
    ========================================= */
 .registrar-request-summary {
   display: grid;
-  grid-template-columns: repeat(6, minmax(4.5rem, 1fr));
+  flex: 1 1 38rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.5rem), 1fr));
+  min-width: 0;
   gap: 0.6rem;
-  flex-shrink: 0;
   padding: 0.65rem 0.75rem;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
@@ -132,6 +135,7 @@
   font-size: 0.68rem;
   font-weight: 600;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .clearance-verification-page .dashboard-header {
@@ -180,6 +184,229 @@
   gap: 0.5rem;
   flex-shrink: 0;
   margin-top: 0 !important;
+}
+
+.student-dashboard-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.9fr);
+  align-items: stretch;
+  width: 100%;
+  gap: 0.9rem;
+  flex: 0 0 auto;
+  min-height: 0;
+  margin-bottom: 0.75rem;
+  box-sizing: border-box;
+}
+
+.student-dashboard-overview .student-clearance-panel {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: 0 !important;
+}
+
+.student-active-documents {
+  display: flex;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  max-height: 300px;
+  flex-direction: column;
+  padding: 1.1rem;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.student-active-documents-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.student-active-documents-heading .settings-section-title {
+  margin: 0;
+}
+
+.student-active-documents-count {
+  display: inline-flex;
+  min-width: 1.7rem;
+  height: 1.7rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: var(--imperial-blue);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.student-active-documents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 0;
+  margin: 0;
+  padding: 0 0.15rem 0 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.student-active-document {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+.student-active-document.is-overdue {
+  border-color: #efb6bc;
+  background: #fff8f8;
+}
+
+.student-active-document-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.student-active-document-main > strong {
+  max-width: 100%;
+  color: var(--imperial-blue);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.student-active-document .status-badge {
+  min-width: 0;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.68rem;
+}
+
+.student-active-document-eta {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.student-active-document-details {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-light);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--imperial-blue);
+  cursor: pointer;
+}
+
+.student-active-document-details svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.student-active-document-details:focus-visible,
+.student-active-document-main:focus-visible {
+  outline: 2px solid var(--imperial-blue);
+  outline-offset: 2px;
+}
+
+.student-overdue-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  color: #495057;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.student-overdue-details > p {
+  margin: 0;
+}
+
+.student-overdue-requested {
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: #eef7ee;
+  color: #286538;
+}
+
+.request-eta-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.request-eta-form > .dashboard-subtext {
+  margin: 0;
+}
+
+.request-eta-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.7rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}
+
+.request-eta-presets legend {
+  padding: 0 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.request-eta-preset {
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--imperial-blue);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.request-eta-preset.is-active {
+  border-color: var(--imperial-blue);
+  background: #eef2ff;
+}
+
+.request-eta-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 0.7fr);
+  gap: 0.65rem;
+}
+
+.request-eta-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
 }
 
 /* =========================================
@@ -805,6 +1032,37 @@ textarea.auth-input {
 .student-records-page .student-current-clearance-actions > .btn-danger:focus-visible {
   outline: 3px solid var(--honey-bronze);
   outline-offset: 2px;
+}
+
+.request-table td.col-status-cell {
+  min-width: 170px;
+}
+
+.request-table td.col-status-cell .status-badge {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.request-table .workflow-inline-actions {
+  width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+.request-table .workflow-inline-actions > .workflow-step-button {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.request-table .workflow-inline-actions > .actions-button {
+  flex: 0 0 auto;
 }
 
 .actions-button {
@@ -1580,7 +1838,9 @@ textarea.auth-input {
     flex-direction: column;
   }
 
+  .registrar-header-content,
   .registrar-request-summary {
+    flex: 0 1 auto;
     width: 100%;
     box-sizing: border-box;
   }

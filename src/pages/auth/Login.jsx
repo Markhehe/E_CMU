@@ -376,6 +376,9 @@ function RegistrationModal({ isOpen, onClose }) {
       if (error.status === 503) {
         setConfirmationEmail(regData.email);
         setEmailDeliveryIssue(true);
+      } else if (error.status === 422) {
+        addToast('Account registration is unavailable at the moment.', 'error');
+        return;
       }
       addToast(error.message || 'Account creation failed.', 'error');
     } finally {
@@ -430,6 +433,10 @@ function RegistrationModal({ isOpen, onClose }) {
         )
       ) : (
         <form onSubmit={handleRegisterSubmit} className="auth-form">
+          <p className="registration-disclaimer" role="note">
+            Account registration is currently unavailable except for the email addresses included in the registration test.
+          </p>
+
           <div className="form-field-group">
             <label htmlFor="regEmail" className="auth-label">University Email</label>
             <input

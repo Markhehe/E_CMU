@@ -121,6 +121,26 @@ const demoClearanceFileData = `data:image/svg+xml;base64,${Buffer.from(
   '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400"><rect width="640" height="400" fill="#f4f6f8"/><rect x="24" y="24" width="592" height="352" rx="16" fill="#ffffff" stroke="#d0d7de" stroke-width="2"/><text x="320" y="185" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" fill="#243b64">Seeded demo clearance</text><text x="320" y="230" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#667085">Placeholder - no picture uploaded</text></svg>',
 ).toString("base64")}`;
 
+async function clearApplicationData(client: pg.PoolClient) {
+  await client.query(`
+    DO $$
+    DECLARE
+      application_tables text;
+    BEGIN
+      SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
+      INTO application_tables
+      FROM pg_tables
+      WHERE schemaname = 'public'
+        AND tablename <> 'migrations';
+
+      IF application_tables IS NOT NULL THEN
+        EXECUTE 'TRUNCATE TABLE ' || application_tables || ' RESTART IDENTITY CASCADE';
+      END IF;
+    END
+    $$
+  `);
+}
+
 function fullName(student: (typeof seedStudents)[number] | typeof registrationTestStudent) {
   return [student.firstName, student.middleName, student.lastName]
     .filter(Boolean)
@@ -675,6 +695,9 @@ async function seed() {
 
   try {
     await client.query("BEGIN");
+
+    await clearApplicationData(client);
+    console.log("Application data cleared; migration history preserved.");
 
     const removedStudents = await removeLegacySeedStudents(client);
 

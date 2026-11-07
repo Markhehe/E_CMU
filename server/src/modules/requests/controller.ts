@@ -182,6 +182,8 @@ export async function listDocumentRequests(
                 usr.full_name AS "requesterName",
                 usr.student_id AS "requesterStudentId",
                 req.status,
+                req.eta_at AS "etaAt",
+                req.eta_update_requested_at AS "etaUpdateRequestedAt",
                 req.purpose,
                 req.additional_details AS "additionalDetails",
                 req.fee_amount AS "feeAmount",

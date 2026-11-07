@@ -26,13 +26,29 @@ import {
 
 const router = Router();
 
+type RegistrarInboxNotification = {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  request_id: string | null;
+  read_at: null;
+  created_at: Date | string;
+};
+
+function createRegistrarInboxNotification(
+  notification: Omit<RegistrarInboxNotification, "read_at">,
+): RegistrarInboxNotification {
+  return { ...notification, read_at: null };
+}
+
 router.get(
   "/notifications",
   requireAuth,
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     try {
       if (req.user!.roles.some((role) => role.toLowerCase() === "registrar")) {
-        const [requests, clearances, paymentProofs] = await Promise.all([
+        const [requests, clearances, paymentProofs, etaUpdateRequests] = await Promise.all([
           pool.query(
             `SELECT request_row.id, request_row.display_code, request_row.submitted_at,
                     requester.full_name AS requester_name,
@@ -65,35 +81,52 @@ router.get(
                             request_row.additional_details->>'proof_of_payment') IS NOT NULL
              ORDER BY request_row.updated_at DESC`,
           ),
+          pool.query(
+            `SELECT request_row.id, request_row.display_code,
+                    request_row.eta_update_requested_at,
+                    requester.full_name AS requester_name,
+                    document.name AS document_name
+             FROM requests AS request_row
+             INNER JOIN users AS requester ON requester.id = request_row.requester_id
+             INNER JOIN document_types AS document ON document.id = request_row.document_type_id
+             WHERE request_row.status = 'overdue'
+               AND request_row.eta_update_requested_at IS NOT NULL
+             ORDER BY request_row.eta_update_requested_at DESC`,
+          ),
         ]);
 
-        const inboxNotifications = [
-          ...requests.rows.map((request) => ({
+        const inboxNotifications: RegistrarInboxNotification[] = [
+          ...requests.rows.map((request) => createRegistrarInboxNotification({
             id: `registrar-request-${request.id}`,
             type: "registrar_request_submitted",
             title: "New document request",
             message: `New request from ${request.requester_name} for ${request.document_name} (${request.display_code}).`,
             request_id: request.id,
-            read_at: null,
             created_at: request.submitted_at,
           })),
-          ...clearances.rows.map((clearance) => ({
+          ...clearances.rows.map((clearance) => createRegistrarInboxNotification({
             id: `registrar-clearance-${clearance.id}`,
             type: "registrar_clearance_submitted",
             title: "New clearance verification request",
             message: `Clearance submitted by ${clearance.requester_name} for verification.`,
             request_id: null,
-            read_at: null,
             created_at: clearance.submitted_at,
           })),
-          ...paymentProofs.rows.map((paymentProof) => ({
+          ...paymentProofs.rows.map((paymentProof) => createRegistrarInboxNotification({
             id: `registrar-payment-${paymentProof.id}`,
             type: "registrar_payment_proof_submitted",
             title: "New payment proof submitted",
             message: `Payment proof submitted by ${paymentProof.requester_name} for request ${paymentProof.display_code}.`,
             request_id: paymentProof.id,
-            read_at: null,
             created_at: paymentProof.updated_at,
+          })),
+          ...etaUpdateRequests.rows.map((request) => createRegistrarInboxNotification({
+            id: `registrar-eta-update-${request.id}`,
+            type: "registrar_eta_update_requested",
+            title: "ETA update requested",
+            message: `${request.requester_name} requested an ETA update for ${request.document_name} (${request.display_code}).`,
+            request_id: request.id,
+            created_at: request.eta_update_requested_at,
           })),
         ].sort((left, right) => (
           new Date(right.created_at).getTime() - new Date(left.created_at).getTime()
@@ -195,6 +228,7 @@ const directRequestStatuses = [
   "clearance_review",
   "paid",
   "processing",
+  "overdue",
   "ready_for_pickup",
   "fulfilled",
   "rejected",
@@ -211,6 +245,12 @@ const reviewSchema = z.object({
 const requestCommentSchema = z.object({
   comment: z.string().trim().min(1).max(240),
   visibility: z.enum(["requester", "staff"]),
+});
+const requestEtaSchema = z.object({
+  etaAt: z.string().datetime({ offset: true }).refine(
+    (value) => new Date(value).getTime() > Date.now(),
+    "Estimated availability must be in the future",
+  ),
 });
 const commentIdSchema = z.coerce.number().int().positive().safe();
 
@@ -311,6 +351,7 @@ const registrarInterventionStatuses = [
   "clearance_review",
   "paid",
   "processing",
+  "overdue",
   "ready_for_pickup",
 ] as const;
 
@@ -754,12 +795,23 @@ router.post(
   requireAuth,
   requireRole("registrar"),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const parsedId = requestIdSchema.safeParse(req.params);
+    const parsedEta = requestEtaSchema.safeParse(req.body);
+    if (!parsedId.success) {
+      return res.status(400).json({ error: "Invalid request ID" });
+    }
+    if (!parsedEta.success) {
+      return res.status(400).json({
+        error: parsedEta.error.issues[0]?.message || "Invalid estimated availability time",
+      });
+    }
+
     const client = await pool.connect();
     try {
-      const { id } = requestIdSchema.parse(req.params);
+      const { id } = parsedId.data;
       await client.query("BEGIN");
       const current = await client.query(
-        "SELECT status FROM requests WHERE id = $1 FOR UPDATE",
+        "SELECT status, requester_id, display_code FROM requests WHERE id = $1 FOR UPDATE",
         [id],
       );
       if (current.rowCount === 0) {
@@ -771,8 +823,11 @@ router.post(
         return res.status(409).json({ error: "Only paid requests can enter processing." });
       }
       await client.query(
-        `UPDATE requests SET status = 'processing', updated_at = NOW() WHERE id = $1`,
-        [id],
+        `UPDATE requests
+         SET status = 'processing', eta_at = $2, eta_update_requested_at = NULL,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [id, parsedEta.data.etaAt],
       );
       await client.query(
         `INSERT INTO request_status_history
@@ -780,8 +835,149 @@ router.post(
          VALUES ($1, 'paid', 'processing', $2, 'Document processing started')`,
         [id, req.user!.id],
       );
+      await client.query(
+        `INSERT INTO notifications
+           (user_id, request_id, channel, type, title, message)
+         VALUES ($1, $2, 'in_app', 'document_eta_set',
+                 'Document processing started',
+                 'Processing has started for request ' || $3 ||
+                   '. Check your dashboard for its estimated availability time.')`,
+        [current.rows[0].requester_id, id, current.rows[0].display_code],
+      );
       await client.query("COMMIT");
-      return res.json({ status: "processing" });
+      return res.json({
+        status: "processing",
+        etaAt: parsedEta.data.etaAt,
+        message: "Document processing started and the student was notified.",
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return next(error);
+    } finally {
+      client.release();
+    }
+  },
+);
+
+router.put(
+  "/:id/eta",
+  requireAuth,
+  requireRole("registrar"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const parsedId = requestIdSchema.safeParse(req.params);
+    const parsedEta = requestEtaSchema.safeParse(req.body);
+    if (!parsedId.success) {
+      return res.status(400).json({ error: "Invalid request ID" });
+    }
+    if (!parsedEta.success) {
+      return res.status(400).json({
+        error: parsedEta.error.issues[0]?.message || "Invalid estimated availability time",
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query(
+        `SELECT status, requester_id, display_code
+         FROM requests
+         WHERE id = $1
+         FOR UPDATE`,
+        [parsedId.data.id],
+      );
+      if (current.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Request not found" });
+      }
+
+      const request = current.rows[0];
+      if (!["processing", "overdue"].includes(request.status)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: "Only processing or overdue requests can have their ETA updated.",
+        });
+      }
+
+      await client.query(
+        `UPDATE requests
+         SET status = 'processing', eta_at = $2, eta_update_requested_at = NULL,
+             updated_at = NOW()
+         WHERE id = $1`,
+        [parsedId.data.id, parsedEta.data.etaAt],
+      );
+      await client.query(
+        `INSERT INTO request_status_history
+           (request_id, from_status, to_status, changed_by, comment)
+         VALUES ($1, $2, 'processing', $3, 'Estimated availability time updated')`,
+        [parsedId.data.id, request.status, req.user!.id],
+      );
+      await client.query(
+        `INSERT INTO notifications
+           (user_id, request_id, channel, type, title, message)
+         VALUES ($1, $2, 'in_app', 'document_eta_updated',
+                 'Estimated availability time updated',
+                 'The estimated availability time for request ' || $3 ||
+                   ' has been updated. Check your dashboard for the new time.')`,
+        [request.requester_id, parsedId.data.id, request.display_code],
+      );
+
+      await client.query("COMMIT");
+      return res.json({
+        status: "processing",
+        etaAt: parsedEta.data.etaAt,
+        message: "The ETA was updated and the student was notified.",
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return next(error);
+    } finally {
+      client.release();
+    }
+  },
+);
+
+router.post(
+  "/:id/request-eta-update",
+  requireAuth,
+  requireRole("student"),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const parsedId = requestIdSchema.safeParse(req.params);
+    if (!parsedId.success) {
+      return res.status(400).json({ error: "Invalid request ID" });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const request = await client.query(
+        `UPDATE requests
+         SET eta_update_requested_at = NOW(), updated_at = NOW()
+         WHERE id = $1
+           AND requester_id = $2
+           AND status = 'overdue'
+           AND eta_update_requested_at IS NULL
+         RETURNING id, display_code`,
+        [parsedId.data.id, req.user!.id],
+      );
+      if (request.rowCount === 0) {
+        const current = await client.query(
+          `SELECT status, eta_update_requested_at
+           FROM requests
+           WHERE id = $1 AND requester_id = $2`,
+          [parsedId.data.id, req.user!.id],
+        );
+        await client.query("ROLLBACK");
+        if (current.rowCount === 0) {
+          return res.status(404).json({ error: "Request not found" });
+        }
+        if (current.rows[0].status !== "overdue") {
+          return res.status(409).json({ error: "ETA updates can only be requested for overdue documents." });
+        }
+        return res.status(409).json({ error: "An ETA update has already been requested for this document." });
+      }
+
+      await client.query("COMMIT");
+      return res.json({ success: true, message: "Your ETA update request was sent to the Registrar." });
     } catch (error) {
       await client.query("ROLLBACK");
       return next(error);
@@ -821,14 +1017,14 @@ router.post(
       }
 
       const request = current.rows[0];
-      if (!["paid", "processing", "ready_for_pickup"].includes(request.status)) {
+      if (!["paid", "processing", "overdue", "ready_for_pickup"].includes(request.status)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
           error: "A request must have verified clearance and confirmed payment before it can be marked ready for pickup.",
         });
       }
 
-      if (["paid", "processing"].includes(request.status)) {
+      if (["paid", "processing", "overdue"].includes(request.status)) {
         await client.query(
           `UPDATE requests
            SET status = 'ready_for_pickup', updated_at = NOW()

@@ -49,6 +49,13 @@
   overflow-y: auto;
 }
 
+.request-review-note {
+  margin: var(--space-md) 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
 .request-create-modal .request-form-embedded,
 .request-create-modal .success-message.card-ui {
   max-width: none;
