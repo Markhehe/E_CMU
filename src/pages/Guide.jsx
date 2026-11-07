@@ -1,4 +1,4 @@
-import './guide.css'
+import './Guide.css'
 
 const documents = [
   'CAV Certification',

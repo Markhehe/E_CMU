@@ -29,6 +29,78 @@ const EyeOffIcon = () => (
   </svg>
 );
 
+const REGISTRATION_POLICIES = {
+  terms: {
+    title: 'Terms and Conditions',
+    sections: [
+      {
+        heading: 'Using the portal',
+        paragraphs: [
+          'The E-CMU Portal supports student document requests, clearance submissions, payment-proof uploads, and request status updates for City of Malabon University.',
+          'Use the portal only for your own legitimate university transactions. Provide accurate information, use your official university email, and keep your password confidential.',
+        ],
+      },
+      {
+        heading: 'Requests and records',
+        paragraphs: [
+          'Submitting a request does not guarantee approval, completion by a particular date, or release of a document. The Registrar and other responsible university offices review submissions and may ask you to correct or provide additional information.',
+          'You are responsible for ensuring that uploaded documents and payment information are accurate and belong to your transaction. Follow the instructions shown in the portal and retain any relevant receipts.',
+        ],
+      },
+      {
+        heading: 'Acceptable use and availability',
+        paragraphs: [
+          'Do not misuse the portal, attempt to access another person’s account or records, submit false information, or interfere with the portal’s operation.',
+          'The portal may be changed, temporarily unavailable, or have features disabled for maintenance or operational reasons. The university may restrict access when necessary to protect users or the service.',
+        ],
+      },
+    ],
+  },
+  privacy: {
+    title: 'Privacy Policy',
+    sections: [
+      {
+        heading: 'Information collected',
+        paragraphs: [
+          'The portal handles account details such as your university email, student identity and profile information, as well as information you submit for document requests, clearance review, payment verification, and communications with university staff.',
+          'The portal also processes account and request activity needed to provide and protect its services.',
+        ],
+      },
+      {
+        heading: 'How information is used',
+        paragraphs: [
+          'Information is used to verify accounts, identify student records, process and review requests, confirm submitted payment proof, communicate status changes, and maintain the security and operation of the portal.',
+        ],
+      },
+      {
+        heading: 'Access, sharing, and retention',
+        paragraphs: [
+          'Relevant information is available to authorized university personnel who handle your account, document requests, clearance, or payment verification. It may also be processed by service providers supporting the portal, subject to their role in providing those services.',
+          'Records are retained as needed to provide the service and meet university recordkeeping, operational, or legal requirements. Handle your password carefully and contact the Registrar through official university channels if you have a question or concern about your information.',
+        ],
+      },
+    ],
+  },
+  cookies: {
+    title: 'Cookie Policy',
+    sections: [
+      {
+        heading: 'Essential sign-in cookie',
+        paragraphs: [
+          'The portal uses an essential, HTTP-only authentication cookie to keep your session signed in and make authenticated requests. It is configured as a same-site cookie and expires after 30 minutes.',
+          'This cookie is necessary for account and portal functions. The portal does not use cookies for advertising or cross-site advertising tracking.',
+        ],
+      },
+      {
+        heading: 'Managing cookies',
+        paragraphs: [
+          'You can manage or clear cookies through your browser settings. Blocking essential cookies may prevent you from signing in or using protected portal features.',
+        ],
+      },
+    ],
+  },
+};
+
 function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -344,6 +416,7 @@ function RegistrationModal({ isOpen, onClose }) {
   const [emailDeliveryIssue, setEmailDeliveryIssue] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [emailVerified, setEmailVerified] = useState(false);
+  const [selectedPolicy, setSelectedPolicy] = useState(null);
 
   const { addToast } = useToast();
   const { login } = useAuth();
@@ -400,138 +473,184 @@ function RegistrationModal({ isOpen, onClose }) {
   };
 
   const handleModalClose = () => {
+    if (selectedPolicy) {
+      setSelectedPolicy(null);
+      return;
+    }
+
     setRegData({ email: '', password: '', confirmPassword: '' });
     setHasAgreedToTerms(false);
     setHasAgreedToDataProtection(false);
     setConfirmationEmail('');
     setEmailVerified(false);
     setEmailDeliveryIssue(false);
+    setSelectedPolicy(null);
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleModalClose} title="Create an account" maxWidth="450px">
-      {confirmationEmail ? (
-        emailVerified ? (
-          <div className="auth-form" style={{ textAlign: 'center' }}>
-            <p>Your email is confirmed. You can now sign in to your account.</p>
-            <button type="button" className="auth-button" onClick={handleModalClose}>
-              CONTINUE TO SIGN IN
-            </button>
-          </div>
-        ) : (
-          <VerificationCodeForm
-            email={confirmationEmail}
-            emailDeliveryIssue={emailDeliveryIssue}
-            onSuccess={(result) => {
-              login(result.user);
-              setEmailVerified(true);
-            }}
-            onResend={handleResendConfirmation}
-            isResending={isResending}
-          />
-        )
-      ) : (
-        <form onSubmit={handleRegisterSubmit} className="auth-form">
-          <p className="registration-disclaimer" role="note">
-            Account registration is currently unavailable except for the email addresses included in the registration test.
-          </p>
-
-          <div className="form-field-group">
-            <label htmlFor="regEmail" className="auth-label">University Email</label>
-            <input
-              id="regEmail"
-              type="email"
-              className="auth-input"
-              placeholder="you@cityofmalabonuniversity.edu.ph"
-              value={regData.email}
-              onChange={(e) => setRegData({ ...regData, email: e.target.value })}
-              autoComplete="email"
-              required
-              disabled={isRegistering}
+    <>
+      <Modal isOpen={isOpen} onClose={handleModalClose} title="Create an account" maxWidth="450px">
+        {confirmationEmail ? (
+          emailVerified ? (
+            <div className="auth-form" style={{ textAlign: 'center' }}>
+              <p>Your email is confirmed. You can now sign in to your account.</p>
+              <button type="button" className="auth-button" onClick={handleModalClose}>
+                CONTINUE TO SIGN IN
+              </button>
+            </div>
+          ) : (
+            <VerificationCodeForm
+              email={confirmationEmail}
+              emailDeliveryIssue={emailDeliveryIssue}
+              onSuccess={(result) => {
+                login(result.user);
+                setEmailVerified(true);
+              }}
+              onResend={handleResendConfirmation}
+              isResending={isResending}
             />
-            <p className="auth-hint">
-              Use your official student email. The part before @ must match the StudentId on file with the Registrar.
+          )
+        ) : (
+          <form onSubmit={handleRegisterSubmit} className="auth-form">
+            <p className="registration-disclaimer" role="note">
+              Account registration is currently unavailable except for the email addresses included in the registration test.
             </p>
-          </div>
 
-          <div className="form-field-group">
-            <label htmlFor="regPassword" className="auth-label">Password</label>
-            <div className="password-input-wrapper">
+            <div className="form-field-group">
+              <label htmlFor="regEmail" className="auth-label">University Email</label>
               <input
-                id="regPassword"
+                id="regEmail"
+                type="email"
+                className="auth-input"
+                placeholder="you@cityofmalabonuniversity.edu.ph"
+                value={regData.email}
+                onChange={(e) => setRegData({ ...regData, email: e.target.value })}
+                autoComplete="email"
+                required
+                disabled={isRegistering}
+              />
+              <p className="auth-hint">
+                Use your official student email. The part before @ must match the StudentId on file with the Registrar.
+              </p>
+            </div>
+
+            <div className="form-field-group">
+              <label htmlFor="regPassword" className="auth-label">Password</label>
+              <div className="password-input-wrapper">
+                <input
+                  id="regPassword"
+                  type={showRegPassword ? 'text' : 'password'}
+                  className="auth-input"
+                  placeholder="Create a strong password"
+                  value={regData.password}
+                  onChange={(e) => setRegData({ ...regData, password: e.target.value })}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                  disabled={isRegistering}
+                />
+                <button
+                  type="button"
+                  className="password-toggle-btn"
+                  onClick={() => setShowRegPassword((prev) => !prev)}
+                  aria-label={showRegPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showRegPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-field-group">
+              <label htmlFor="regConfirmPassword" className="auth-label">Re-enter password</label>
+              <input
+                id="regConfirmPassword"
                 type={showRegPassword ? 'text' : 'password'}
                 className="auth-input"
-                placeholder="Create a strong password"
-                value={regData.password}
-                onChange={(e) => setRegData({ ...regData, password: e.target.value })}
+                placeholder="Re-enter your password"
+                value={regData.confirmPassword}
+                onChange={(e) => setRegData({ ...regData, confirmPassword: e.target.value })}
                 autoComplete="new-password"
                 minLength={8}
                 required
                 disabled={isRegistering}
               />
-              <button
-                type="button"
-                className="password-toggle-btn"
-                onClick={() => setShowRegPassword((prev) => !prev)}
-                aria-label={showRegPassword ? 'Hide password' : 'Show password'}
-              >
-                {showRegPassword ? <EyeOffIcon /> : <EyeIcon />}
-              </button>
             </div>
-          </div>
 
-          <div className="form-field-group">
-            <label htmlFor="regConfirmPassword" className="auth-label">Re-enter password</label>
-            <input
-              id="regConfirmPassword"
-              type={showRegPassword ? 'text' : 'password'}
-              className="auth-input"
-              placeholder="Re-enter your password"
-              value={regData.confirmPassword}
-              onChange={(e) => setRegData({ ...regData, confirmPassword: e.target.value })}
-              autoComplete="new-password"
-              minLength={8}
-              required
-              disabled={isRegistering}
-            />
-          </div>
+            <div className="registration-consent-group">
+              <div className="registration-consent">
+                <input
+                  id="acceptTerms"
+                  type="checkbox"
+                  checked={hasAgreedToTerms}
+                  onChange={(e) => setHasAgreedToTerms(e.target.checked)}
+                  required
+                  disabled={isRegistering}
+                />
+                <span>
+                  <label htmlFor="acceptTerms">I agree to the </label>
+                  <button type="button" className="registration-policy-link" onClick={() => setSelectedPolicy('terms')}>
+                    Terms and Conditions
+                  </button>
+                  .
+                </span>
+              </div>
+              <div className="registration-consent">
+                <input
+                  id="acceptDataProtection"
+                  type="checkbox"
+                  checked={hasAgreedToDataProtection}
+                  onChange={(e) => setHasAgreedToDataProtection(e.target.checked)}
+                  required
+                  disabled={isRegistering}
+                />
+                <span>
+                  <label htmlFor="acceptDataProtection">I acknowledge the </label>
+                  <button type="button" className="registration-policy-link" onClick={() => setSelectedPolicy('privacy')}>
+                    Privacy Policy
+                  </button>
+                  .
+                </span>
+              </div>
+              <p className="registration-policy-notice">
+                Read our{' '}
+                <button type="button" className="registration-policy-link" onClick={() => setSelectedPolicy('cookies')}>
+                  Cookie Policy
+                </button>
+                .
+              </p>
+            </div>
 
-          <div className="registration-consent-group">
-            <label className="registration-consent" htmlFor="acceptTerms">
-              <input
-                id="acceptTerms"
-                type="checkbox"
-                checked={hasAgreedToTerms}
-                onChange={(e) => setHasAgreedToTerms(e.target.checked)}
-                required
-                disabled={isRegistering}
-              />
-              <span>I agree to the Terms of Service.</span>
-            </label>
-            <label className="registration-consent" htmlFor="acceptDataProtection">
-              <input
-                id="acceptDataProtection"
-                type="checkbox"
-                checked={hasAgreedToDataProtection}
-                onChange={(e) => setHasAgreedToDataProtection(e.target.checked)}
-                required
-                disabled={isRegistering}
-              />
-              <span>I acknowledge and agree to the Data Protection Agreement.</span>
-            </label>
-          </div>
+            <button
+              type="submit"
+              className="auth-button"
+              disabled={isRegistering || !hasAgreedToTerms || !hasAgreedToDataProtection}
+            >
+              {isRegistering ? 'CREATING...' : 'CREATE ACCOUNT'}
+            </button>
+          </form>
+        )}
+      </Modal>
 
-          <button
-            type="submit"
-            className="auth-button"
-            disabled={isRegistering || !hasAgreedToTerms || !hasAgreedToDataProtection}
-          >
-            {isRegistering ? 'CREATING...' : 'CREATE ACCOUNT'}
-          </button>
-        </form>
-      )}
-    </Modal>
+      <Modal
+        isOpen={Boolean(selectedPolicy)}
+        onClose={() => setSelectedPolicy(null)}
+        title={selectedPolicy ? REGISTRATION_POLICIES[selectedPolicy].title : ''}
+        maxWidth="620px"
+        zIndex={10001}
+      >
+        {selectedPolicy && (
+          <div className="registration-policy-content">
+            {REGISTRATION_POLICIES[selectedPolicy].sections.map((section) => (
+              <section key={section.heading}>
+                <h3>{section.heading}</h3>
+                {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+              </section>
+            ))}
+          </div>
+        )}
+      </Modal>
+    </>
   );
 }
 

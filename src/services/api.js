@@ -4,7 +4,7 @@
  * error normalization, and request formatting.
  */
 
-export const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
 // Helper purely for data transformation, not UI validation
 function readFileAsDataUrl(file) {

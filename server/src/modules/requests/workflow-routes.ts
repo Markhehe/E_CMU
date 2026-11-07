@@ -1220,7 +1220,7 @@ router.delete(
          RETURNING id`,
         [id.data, req.user!.id],
       );
-      if (deleted.rowCount > 0) {
+      if (deleted.rows.length > 0) {
         return res.json({ success: true });
       }
 
