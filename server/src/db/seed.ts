@@ -49,7 +49,7 @@ const registrationTestStudent = {
   studentId: "20230554",
   firstName: "Mark",
   middleName: "",
-  lastName: "hehe",
+  lastName: "E",
   birthdate: "2004-05-23",
 };
 const legacySeedStudentIds = Array.from({ length: 5 }, (_, index) => {

@@ -153,6 +153,7 @@ function RegistrarDashboard() {
         <div className="registrar-header-content">
           <h1 className="dashboard-title">Registrar Control Panel</h1>
           <p className="dashboard-subtext">Manage and process incoming student document requests.</p>
+          <p className="header-note">* Note: This portal assumes that online payment is available for the finance office and a method of delivery is available.</p>
           <button type="button" className="btn-primary" onClick={() => setIsWalkInModalOpen(true)}>
             Enter Walk-in Request
           </button>
