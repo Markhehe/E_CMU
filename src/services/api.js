@@ -164,16 +164,22 @@ export const AuthService = {
       body: JSON.stringify({ email, password }),
     });
   },
-  async verifyEmail(email, code) {
-    return apiRequest('/auth/verify-email', {
+  async requestPasswordReset(email) {
+    return apiRequest('/auth/password-reset/request', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+  async verifyPasswordResetCode(email, code) {
+    return apiRequest('/auth/password-reset/verify', {
       method: 'POST',
       body: JSON.stringify({ email, code }),
     });
   },
-  async resendConfirmation(email) {
-    return apiRequest('/auth/resend-confirmation', {
+  async completePasswordReset(resetToken, newPassword) {
+    return apiRequest('/auth/password-reset/complete', {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ resetToken, newPassword }),
     });
   },
   async me() {

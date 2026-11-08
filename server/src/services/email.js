@@ -40,16 +40,16 @@ export function scheduleEmailNotification(name, send) {
     });
 }
 
-export async function sendConfirmationEmail({ email, fullName, code }) {
+export async function sendPasswordResetCodeEmail({ email, fullName, code }) {
     const transport = createTransport();
     const safeName = escapeHtml(fullName);
 
     await transport.sendMail({
         from: process.env.SMTP_FROM,
         to: email,
-        subject: "Your E-CMU Portal verification code",
-        text: `Hello ${fullName},\n\nYour E-CMU Portal verification code is ${code}.\nEnter this code in the registration screen within 120 seconds to confirm your email address.\n\nIf you did not create this account, you can ignore this email.`,
-        html: `<p>Hello ${safeName},</p><p>Your E-CMU Portal verification code is:</p><p style="font-size:2rem;font-weight:bold;letter-spacing:0.3rem">${code}</p><p>Enter this code in the registration screen within 120 seconds to confirm your email address.</p><p>If you did not create this account, you can ignore this email.</p>`,
+        subject: "Your E-CMU Portal password reset code",
+        text: `Hello ${fullName},\n\nYour E-CMU Portal password reset code is ${code}.\nEnter this code in the portal within 10 minutes to reset your password.\n\nIf you did not request a password reset, you can ignore this email.`,
+        html: `<p>Hello ${safeName},</p><p>Your E-CMU Portal password reset code is:</p><p style="font-size:2rem;font-weight:bold;letter-spacing:0.3rem">${code}</p><p>Enter this code in the portal within 10 minutes to reset your password.</p><p>If you did not request a password reset, you can ignore this email.</p>`,
     });
 }
 

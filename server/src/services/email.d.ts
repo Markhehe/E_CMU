@@ -3,7 +3,7 @@ export function scheduleEmailNotification(
   send: () => Promise<void>,
 ): void;
 
-export function sendConfirmationEmail(input: {
+export function sendPasswordResetCodeEmail(input: {
   email: string;
   fullName: string;
   code: string;
