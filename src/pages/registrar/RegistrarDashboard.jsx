@@ -12,6 +12,7 @@ import TableEmptyState from '../../components/ui/TableEmptyState';
 import RequestDisplaySelect from '../../components/ui/RequestDisplaySelect';
 import RequestPagination from '../../components/ui/RequestPagination';
 import { useRequestDisplay } from '../../hooks/useRequestDisplay';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Extracted Modals
 import WalkInRequestModal from './WalkInRequestModal';
@@ -34,6 +35,7 @@ const REQUEST_STATUS_SUMMARY = [
 function RegistrarDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { isRegistrarAdmin } = useAuth();
   const appliedNotificationFilterKey = useRef(null);
   
   const {
@@ -389,7 +391,9 @@ function RegistrarDashboard() {
       {openMenuId && activeMenuRequest && (
         <div className="actions-menu-fixed" style={menuCoords}>
           <button type="button" onClick={() => { setViewingRequest(activeMenuRequest); setOpenMenuId(null); }}>View Details</button>
-          <button type="button" onClick={() => { setRequestToChangeStatus(activeMenuRequest); setOpenMenuId(null); }}>Change status</button>
+          {(isRegistrarAdmin || activeMenuRequest.rawStatus !== 'fulfilled') && (
+            <button type="button" onClick={() => { setRequestToChangeStatus(activeMenuRequest); setOpenMenuId(null); }}>Change status</button>
+          )}
           
           {activeMenuRequest.receiptUrl && (
             <button type="button" onClick={() => { setViewingReceiptRequest(activeMenuRequest); setOpenMenuId(null); }}>View Receipt</button>

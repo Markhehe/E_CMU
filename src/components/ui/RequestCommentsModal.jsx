@@ -23,7 +23,9 @@ function RequestCommentsModal({
   const [commentToDelete, setCommentToDelete] = useState(null);
   const commentLimitNotified = useRef(false);
   const isStaff = currentUser?.rawRoles?.some((role) =>
-    String(role).toLowerCase() === 'registrar'
+    ['registrar', 'registrar_staff', 'admin', 'administrator'].includes(
+      String(role).toLowerCase()
+    )
   );
 
   useEffect(() => {

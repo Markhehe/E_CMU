@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./modules/auth/routes.js";
 import requestRoutes from "./modules/requests/routes.js";
 import workflowRoutes from "./modules/requests/workflow-routes.js";
+import registrarStaffRoutes from "./modules/admin/registrar-staff-routes.js";
 import { requireAuth } from "./middleware/auth.js";
 import { startDataChangeFeed, streamDataChanges } from "./services/data-change-feed.js";
 
@@ -21,6 +22,7 @@ app.use(express.json({ limit: "9mb" }));
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
+app.use("/api/admin/registrar-staff", registrarStaffRoutes);
 
 app.use("/api/requests", requestRoutes);
 app.use("/api/requests", workflowRoutes);

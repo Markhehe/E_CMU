@@ -120,7 +120,7 @@ export function streamDataChanges(req: AuthenticatedRequest, res: Response) {
     response: res,
     userId: String(req.user.id),
     isRegistrar: roles.some((role) =>
-      ["registrar", "administrator", "admin", "saso"].includes(role),
+      ["registrar", "registrar_staff", "administrator", "admin", "saso"].includes(role),
     ),
   };
 

@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useMemo } from 'react';
-import { NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useStudentClearance } from '../../hooks/useStudentClearance';
 import cmuLogo from '../../assets/cmulogo.png';
@@ -51,6 +51,15 @@ const SettingsIcon = () => (
   </svg>
 );
 
+const PeopleIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+    <circle cx="9" cy="7" r="4"></circle>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+  </svg>
+);
+
 const NAV_CONFIG = {
   REGISTRAR: {
     homePath: '/registrar/dashboard',
@@ -71,10 +80,8 @@ const NAV_CONFIG = {
 };
 
 export default function Sidebar({ isOpen, onClose }) {
-  const { currentUser } = useAuth();
+  const { currentUser, isRegistrarAdmin } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  
   const role = currentUser?.role?.toUpperCase() || 'STUDENT';
   const isStudent = role === 'STUDENT';
   
@@ -105,7 +112,15 @@ export default function Sidebar({ isOpen, onClose }) {
 
   // UX Fix: Prevent the label from flickering while the API fetches clearance status
   const navLinks = useMemo(() => {
-    if (!isStudent) return currentNav.links;
+    if (!isStudent) {
+      return isRegistrarAdmin
+        ? [...currentNav.links, {
+          to: '/registrar/staff',
+          label: 'Registrar Staff',
+          icon: PeopleIcon,
+        }]
+        : currentNav.links;
+    }
 
     return currentNav.links.map((item) => {
       if (item.to !== '/student/create-request') return item;
@@ -118,7 +133,7 @@ export default function Sidebar({ isOpen, onClose }) {
 
       return { ...item, label: displayLabel };
     });
-  }, [isStudent, currentNav.links, isClearanceLoading, isVerified]);
+  }, [isStudent, isRegistrarAdmin, currentNav.links, isClearanceLoading, isVerified]);
 
   const handleLinkClick = (e, targetPath) => {
     // 1. Close the mobile drawer on click

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useOverlayScrollbars } from 'overlayscrollbars-react';
 import { useServerEvents } from '../../hooks/useServerEvents';
 import { ClearanceService } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import ClearancePreviewModal from '../../components/ui/ClearancePreviewModal';
 import Modal from '../../components/ui/Modal';
@@ -33,6 +34,7 @@ function RegistrarClearanceDashboard() {
   const [previewingClearance, setPreviewingClearance] = useState(null);
   const [activeTab, setActiveTab] = useState('pending');
   const { addToast } = useToast();
+  const { isRegistrarAdmin } = useAuth();
 
   useEffect(() => {
     if (tableWrapperRef.current) initializeScrollbars(tableWrapperRef.current);
@@ -297,7 +299,7 @@ function RegistrarClearanceDashboard() {
                 <td>{activeTab === 'archive' ? 'Verified' : 'Awaiting verification'}</td>
                 <td>
                   {activeTab === 'archive' ? (
-                    submission.is_current ? (
+                    submission.is_current && isRegistrarAdmin ? (
                       <button
                         type="button"
                         className="workflow-step-button workflow-action-button workflow-action-button-danger text-danger"
@@ -306,6 +308,8 @@ function RegistrarClearanceDashboard() {
                       >
                         Invalidate Clearance
                       </button>
+                    ) : submission.is_current ? (
+                      <span className="doc-meta">Admin action only</span>
                     ) : (
                       <span className="doc-meta">Historical record</span>
                     )

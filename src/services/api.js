@@ -391,3 +391,29 @@ export const NotificationService = {
     return apiRequest('/requests/notifications/read-all', { method: 'POST' });
   },
 };
+
+export const RegistrarStaffService = {
+  async list() {
+    const result = await apiRequest('/admin/registrar-staff');
+    return result.staff || [];
+  },
+  async create({ fullName, email, password }) {
+    const result = await apiRequest('/admin/registrar-staff', {
+      method: 'POST',
+      body: JSON.stringify({ fullName, email, password }),
+    });
+    return result.staff;
+  },
+  async setActive(id, active) {
+    const result = await apiRequest(`/admin/registrar-staff/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ active }),
+    });
+    return result.staff;
+  },
+  async remove(id) {
+    return apiRequest(`/admin/registrar-staff/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  },
+};

@@ -10,7 +10,13 @@ const registrar = {
   email: "seed.registrar@ecmu.test",
   fullName: "Demo Registrar Admin",
   stakeholderType: "other",
-  role: "registrar",
+  role: "admin",
+};
+const registrarStaff = {
+  email: "seed.registrar.staff@ecmu.test",
+  fullName: "Demo Registrar Staff",
+  stakeholderType: "other",
+  role: "registrar_staff",
 };
 const studentEmailDomain = "@cityofmalabonuniversity.edu.ph";
 const seedStudents = [
@@ -651,6 +657,66 @@ async function resolveStudentFixture(
   return { ...fixture, studentId };
 }
 
+async function seedRegistrarAccount(
+  client: pg.PoolClient,
+  account: typeof registrar | typeof registrarStaff,
+  passwordHash: string,
+) {
+  const roleResult = await client.query<{ id: number }>(
+    "SELECT id FROM roles WHERE name = $1",
+    [account.role],
+  );
+  const roleId = roleResult.rows[0]?.id;
+  if (roleId === undefined) {
+    throw new Error(`Required role is missing: ${account.role}`);
+  }
+
+  await client.query(
+    `INSERT INTO users
+       (email, password_hash, full_name, stakeholder_type, active)
+     VALUES ($1, $2, $3, $4, TRUE)
+     ON CONFLICT (email) DO NOTHING`,
+    [account.email, passwordHash, account.fullName, account.stakeholderType],
+  );
+  const userResult = await client.query<{
+    id: string;
+    full_name: string;
+    stakeholder_type: string;
+  }>(
+    `SELECT id, full_name, stakeholder_type
+     FROM users
+     WHERE email = $1
+     FOR UPDATE`,
+    [account.email],
+  );
+  const user = userResult.rows[0];
+  if (
+    !user ||
+    user.full_name !== account.fullName ||
+    user.stakeholder_type !== account.stakeholderType
+  ) {
+    throw new Error(
+      `Seed registrar conflicts with existing account ${account.email}; no changes committed.`,
+    );
+  }
+
+  await client.query(
+    `DELETE FROM user_roles AS assignment
+     USING roles AS assigned_role
+     WHERE assignment.role_id = assigned_role.id
+       AND assignment.user_id = $1
+       AND assigned_role.name IN ('registrar', 'registrar_staff', 'admin', 'administrator')`,
+    [user.id],
+  );
+  await client.query(
+    `INSERT INTO user_roles (user_id, role_id)
+     VALUES ($1, $2)
+     ON CONFLICT (user_id, role_id) DO NOTHING`,
+    [user.id, roleId],
+  );
+  return user.id;
+}
+
 async function seed() {
   if (!seedPassword || seedPassword === "ChangeMe123!") {
     throw new Error(
@@ -680,7 +746,7 @@ async function seed() {
 
     await client.query(
       `INSERT INTO roles (name)
-       VALUES ('student'), ('registrar')
+       VALUES ('student'), ('registrar'), ('registrar_staff'), ('admin')
        ON CONFLICT (name) DO NOTHING`,
     );
 
@@ -693,15 +759,6 @@ async function seed() {
       );
     }
 
-    const roleResult = await client.query<{ id: number }>(
-      "SELECT id FROM roles WHERE name = $1",
-      [registrar.role],
-    );
-    const roleId = roleResult.rows[0]?.id;
-    if (roleId === undefined) {
-      throw new Error(`Required role is missing: ${registrar.role}`);
-    }
-
     const studentRoleResult = await client.query<{ id: number }>(
       "SELECT id FROM roles WHERE name = 'student'",
     );
@@ -710,55 +767,12 @@ async function seed() {
       throw new Error("Required role is missing: student");
     }
 
-    await client.query(
-      `INSERT INTO users
-         (email, password_hash, full_name, stakeholder_type, active)
-       VALUES ($1, $2, $3, $4, TRUE)
-       ON CONFLICT (email) DO NOTHING`,
-      [
-        registrar.email,
-        passwordHash,
-        registrar.fullName,
-        registrar.stakeholderType,
-      ],
+    const registrarId = await seedRegistrarAccount(
+      client,
+      registrar,
+      passwordHash,
     );
-
-    const userResult = await client.query<{
-      id: string;
-      full_name: string;
-      stakeholder_type: string;
-    }>(
-      `SELECT id, full_name, stakeholder_type
-       FROM users
-       WHERE email = $1
-       FOR UPDATE`,
-      [registrar.email],
-    );
-    const user = userResult.rows[0];
-    if (
-      !user ||
-      user.full_name !== registrar.fullName ||
-      user.stakeholder_type !== registrar.stakeholderType
-    ) {
-      throw new Error(
-        `Seed registrar conflicts with existing account ${registrar.email}; no changes committed.`,
-      );
-    }
-
-    await client.query(
-      `INSERT INTO user_roles (user_id, role_id)
-       VALUES ($1, $2)
-       ON CONFLICT (user_id, role_id) DO NOTHING`,
-      [user.id, roleId],
-    );
-
-    const assignedRole = await client.query(
-      "SELECT 1 FROM user_roles WHERE user_id = $1 AND role_id = $2",
-      [user.id, roleId],
-    );
-    if (assignedRole.rowCount !== 1) {
-      throw new Error(`Failed to assign role ${registrar.role} to ${registrar.email}`);
-    }
+    await seedRegistrarAccount(client, registrarStaff, passwordHash);
 
     const reservedStudentIds = new Set<string>([
       registrationTestStudent.studentId,
@@ -847,17 +861,18 @@ async function seed() {
     const seededRequests = await seedDemoRequests(
       client,
       resolvedStudents,
-      user.id,
+      registrarId,
     );
     const seededClearances = await seedDemoClearances(
       client,
       resolvedStudents,
-      user.id,
+      registrarId,
     );
 
     await client.query("COMMIT");
     console.log("Seed completed.");
-    console.log(`Registrar account ensured: ${registrar.email}.`);
+    console.log(`Registrar admin account ensured: ${registrar.email}.`);
+    console.log(`Registrar staff account ensured: ${registrarStaff.email}.`);
     console.log(`Legacy demo student accounts removed: ${removedStudents}.`);
     console.log(`Demo student login accounts ensured: ${seedStudents.length}.`);
     console.log(`Demo requests created with all statuses: ${seededRequests}.`);

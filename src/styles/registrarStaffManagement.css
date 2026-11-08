@@ -1,0 +1,111 @@
+.registrar-staff-page {
+  gap: 1rem;
+  overflow: auto;
+}
+
+.registrar-staff-page .dashboard-header {
+  margin-bottom: 0;
+}
+
+.registrar-staff-create,
+.registrar-staff-list-section {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--surface-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.registrar-staff-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+}
+
+.registrar-staff-section-heading .settings-section-title,
+.registrar-staff-section-heading .dashboard-subtext {
+  margin: 0;
+}
+
+.registrar-staff-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  align-items: end;
+  gap: 1rem;
+  padding: 0 1rem 1rem;
+}
+
+.registrar-staff-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--imperial-blue);
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.registrar-staff-form small {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.registrar-staff-form .btn-primary {
+  min-height: 2.8rem;
+}
+
+.registrar-staff-table {
+  max-height: 25rem;
+  border: 0;
+  border-top: 1px solid var(--border-light);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  box-shadow: none;
+}
+
+.registrar-staff-table .request-table {
+  min-width: 760px;
+}
+
+.registrar-staff-status {
+  display: inline-flex;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.registrar-staff-status.is-active {
+  background: #e7f5ec;
+  color: #176b36;
+}
+
+.registrar-staff-status.is-disabled {
+  background: #f1f2f4;
+  color: #525b68;
+}
+
+.registrar-staff-actions-heading,
+.registrar-staff-actions {
+  text-align: right !important;
+}
+
+.registrar-staff-actions {
+  white-space: nowrap;
+}
+
+.registrar-staff-actions .workflow-step-button {
+  margin-left: 0.4rem;
+}
+
+@media (max-width: 700px) {
+  .registrar-staff-form {
+    grid-template-columns: 1fr;
+  }
+
+  .registrar-staff-actions-heading,
+  .registrar-staff-actions {
+    text-align: left !important;
+  }
+}

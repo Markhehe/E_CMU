@@ -22,6 +22,7 @@ import CreateRequest from './pages/student/CreateRequest';
 import RegistrarDashboard from './pages/registrar/RegistrarDashboard';
 import RegistrarClearanceDashboard from './pages/registrar/RegistrarClearanceDashboard';
 import RegistrarStudents from './pages/registrar/RegistrarStudents';
+import RegistrarStaffManagement from './pages/registrar/RegistrarStaffManagement';
 import Settings from './pages/Settings';
 import ActionCooldown from './components/ui/ActionCooldown';
 
@@ -45,8 +46,8 @@ const getDefaultRoute = (role) => {
  * Route Guard Component for Role-Based Access Control (RBAC).
  * Intercepts unauthenticated requests and handles unauthorized role redirects.
  */
-function ProtectedRoute({ allowedRole, allowedRoles, children }) {
-  const { isAuthenticated, currentUser, isLoading } = useAuth();
+function ProtectedRoute({ allowedRole, allowedRoles, requireRegistrarAdmin = false, children }) {
+  const { isAuthenticated, currentUser, isLoading, isRegistrarAdmin } = useAuth();
 
   // Prevent flash redirects while reading token from persistent storage
   if (isLoading) {
@@ -80,6 +81,9 @@ function ProtectedRoute({ allowedRole, allowedRoles, children }) {
     : null;
 
   if (validRoles && !validRoles.includes(userRole)) {
+    return <Navigate to={getDefaultRoute(userRole)} replace />;
+  }
+  if (requireRegistrarAdmin && !isRegistrarAdmin) {
     return <Navigate to={getDefaultRoute(userRole)} replace />;
   }
 
@@ -205,6 +209,14 @@ function App() {
           <Route path="/registrar/dashboard" element={<RegistrarDashboard />} />
           <Route path="/registrar/clearance" element={<RegistrarClearanceDashboard />} />
           <Route path="/registrar/students" element={<RegistrarStudents />} />
+          <Route
+            path="/registrar/staff"
+            element={
+              <ProtectedRoute allowedRole="REGISTRAR" requireRegistrarAdmin>
+                <RegistrarStaffManagement />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/registrar" element={<Navigate to="/registrar/dashboard" replace />} />
         </Route>
 

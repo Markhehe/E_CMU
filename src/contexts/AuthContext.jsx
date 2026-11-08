@@ -19,7 +19,13 @@ function toSessionUser(user) {
   const normalizedRoles = roles.map((r) => String(r).toLowerCase());
 
   let primaryRole = 'STUDENT';
-  if (normalizedRoles.includes('administrator') || normalizedRoles.includes('admin') || normalizedRoles.includes('registrar') || normalizedRoles.includes('saso')) {
+  if (
+    normalizedRoles.includes('administrator')
+    || normalizedRoles.includes('admin')
+    || normalizedRoles.includes('registrar')
+    || normalizedRoles.includes('registrar_staff')
+    || normalizedRoles.includes('saso')
+  ) {
     primaryRole = 'REGISTRAR';
   }
 
@@ -123,6 +129,9 @@ export const AuthProvider = ({ children }) => {
       isLoading,
       // Role Convenience Helpers
       isRegistrar: currentUser?.role === 'REGISTRAR',
+      isRegistrarAdmin: currentUser?.rawRoles?.some((role) =>
+        ['admin', 'administrator'].includes(String(role).toLowerCase())
+      ) ?? false,
       isStudent: currentUser?.role === 'STUDENT',
       hasRole: (roleName) => currentUser?.role === String(roleName).toUpperCase(),
       login,

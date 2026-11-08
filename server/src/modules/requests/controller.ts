@@ -172,7 +172,9 @@ export async function listDocumentRequests(
             return res.status(401).json({ error: "Authentication required" });
         }
         const canListAll = req.user.roles.some((role) =>
-            ["registrar"].includes(role),
+            ["registrar", "registrar_staff", "admin", "administrator"].includes(
+                role.toLowerCase(),
+            ),
         );
         const result = await pool.query(
             `SELECT

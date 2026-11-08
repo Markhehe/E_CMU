@@ -31,7 +31,7 @@ router.get(
   requireAuth,
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     try {
-      if (req.user!.roles.some((role) => role.toLowerCase() === "registrar")) {
+      if (req.user!.roles.some((role) => staffRoles.includes(role.toLowerCase()))) {
         const [requests, clearances, paymentProofs] = await Promise.all([
           pool.query(
             `SELECT request_row.id, request_row.display_code, request_row.submitted_at,
@@ -214,7 +214,14 @@ const requestCommentSchema = z.object({
 });
 const commentIdSchema = z.coerce.number().int().positive().safe();
 
-const staffRoles = ["registrar"];
+const staffRoles = ["registrar", "registrar_staff", "admin", "administrator"];
+const registrarAdminRoles = ["admin", "administrator"];
+
+function isRegistrarAdmin(req: WorkflowRequest) {
+  return req.user?.roles.some((role) =>
+    registrarAdminRoles.includes(role.toLowerCase()),
+  ) ?? false;
+}
 
 const paymentSchema = z
   .object({
@@ -317,7 +324,7 @@ const registrarInterventionStatuses = [
 router.patch(
   "/:id/status",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const parsedId = requestIdSchema.safeParse(req.params);
     if (!parsedId.success) {
@@ -362,6 +369,13 @@ router.patch(
       if (request.status === nextStatus) {
         await client.query("COMMIT");
         return res.json({ status: nextStatus, changed: false });
+      }
+
+      if (request.status === "fulfilled" && !isRegistrarAdmin(req)) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          error: "Only a registrar admin can directly change a fulfilled request.",
+        });
       }
 
       if (request.status === "fulfilled" && nextStatus !== "fulfilled") {
@@ -537,7 +551,7 @@ async function createReview(
 router.post(
   "/:id/registrar-review",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     try {
       const { id } = requestIdSchema.parse(req.params);
@@ -571,7 +585,9 @@ router.get(
     }
 
     try {
-      const isStaff = req.user!.roles?.some((role) => staffRoles.includes(role)) ?? false;
+      const isStaff = req.user!.roles?.some((role) =>
+        staffRoles.includes(role.toLowerCase()),
+      ) ?? false;
       const result = await pool.query(
         `SELECT comment_row.id, comment_row.author_id, comment_row.comment, comment_row.visibility,
                 comment_row.created_at, author.full_name AS author_name
@@ -717,7 +733,9 @@ router.post(
     }
 
     try {
-      const isStaff = req.user!.roles.some((role) => staffRoles.includes(role));
+      const isStaff = req.user!.roles.some((role) =>
+        staffRoles.includes(role.toLowerCase()),
+      );
       const request = await pool.query(
         `SELECT EXISTS (
            SELECT 1
@@ -752,7 +770,7 @@ router.post(
 router.post(
   "/:id/start-processing",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const client = await pool.connect();
     try {
@@ -794,7 +812,7 @@ router.post(
 router.post(
   "/:id/ready-for-pickup",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const client = await pool.connect();
     let requestForEmail:
@@ -877,7 +895,7 @@ router.post(
 router.post(
   "/:id/pickup",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const client = await pool.connect();
     try {
@@ -992,7 +1010,7 @@ router.post(
          INNER JOIN roles AS account_role
            ON account_role.id = assignment.role_id
          CROSS JOIN users AS student
-         WHERE lower(account_role.name) = 'registrar'
+         WHERE lower(account_role.name) IN ('registrar', 'registrar_staff', 'admin', 'administrator')
            AND student.id = $1`,
         [req.user!.id],
       );
@@ -1049,7 +1067,7 @@ router.delete(
 router.get(
   "/clearances",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (_req: WorkflowRequest, res: Response, next: NextFunction) => {
     try {
       const result = await pool.query(
@@ -1075,7 +1093,7 @@ router.get(
 router.get(
   "/clearances/archive",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const query = z.string().trim().max(100).optional().safeParse(req.query.q);
     if (!query.success) {
@@ -1129,7 +1147,7 @@ router.get(
 router.get(
   "/students/search",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const query = z.string().trim().max(100).optional().safeParse(req.query.q);
     if (!query.success) {
@@ -1269,7 +1287,7 @@ router.get(
 router.get(
   "/students/:studentId",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const studentId = z.string().trim().min(1).max(64).safeParse(req.params.studentId);
     if (!studentId.success) {
@@ -1345,8 +1363,14 @@ router.get(
 router.post(
   "/clearances/:id/invalidate",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    if (!isRegistrarAdmin(req)) {
+      return res.status(403).json({
+        error: "Only a registrar admin can invalidate a verified clearance.",
+      });
+    }
+
     const id = z.coerce.number().int().positive().safe().safeParse(req.params.id);
     const parsed = clearanceInvalidationSchema.safeParse(req.body);
     if (!id.success || !parsed.success) {
@@ -1430,7 +1454,7 @@ router.post(
 router.post(
   "/clearances/:id/review",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const id = z.coerce.number().int().positive().safe().safeParse(req.params.id);
     const parsed = clearanceReviewSchema.safeParse(req.body);
@@ -1544,7 +1568,7 @@ router.post(
 router.post(
   "/walk-in",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const parsed = walkInRequestSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1799,7 +1823,7 @@ router.post(
          FROM user_roles AS assignment
          INNER JOIN roles AS account_role
            ON account_role.id = assignment.role_id
-         WHERE lower(account_role.name) = 'registrar'`,
+         WHERE lower(account_role.name) IN ('registrar', 'registrar_staff', 'admin', 'administrator')`,
         [id, request.requester_name, request.display_code],
       );
 
@@ -1824,7 +1848,7 @@ router.post(
 router.post(
   "/:id/payments",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const client = await pool.connect();
     try {
