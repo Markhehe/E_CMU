@@ -111,11 +111,26 @@
     max-height: none;
   }
 
+  .dashboard-page.clearance-verification-page .request-table-wrapper.clearance-verification-table {
+    height: min(65vh, 620px);
+    min-height: min(360px, 60vh);
+  }
+
   .student-clearance-panel {
     width: 100%;
     max-width: none;
     flex: 0 0 auto;
     padding: 1rem !important;
+  }
+
+  .student-dashboard-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .student-active-documents {
+    width: 100%;
+    max-height: 320px;
+    box-sizing: border-box;
   }
 
   .dashboard-header-container {
@@ -354,6 +369,18 @@
 
   .student-clearance-panel {
     padding: 0.85rem !important;
+  }
+
+  .request-eta-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .request-eta-actions {
+    flex-direction: column-reverse;
+  }
+
+  .request-eta-actions > button {
+    width: 100%;
   }
 
   .student-clearance-panel > div[role='status'] {

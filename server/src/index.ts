@@ -8,6 +8,7 @@ import workflowRoutes from "./modules/requests/workflow-routes.js";
 import registrarStaffRoutes from "./modules/admin/registrar-staff-routes.js";
 import { requireAuth } from "./middleware/auth.js";
 import { startDataChangeFeed, streamDataChanges } from "./services/data-change-feed.js";
+import { startRequestEtaScheduler } from "./services/request-eta-scheduler.js";
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.get("/api/health", (_req, res) => {
 const port = Number(process.env.PORT ?? 5000);
 
 void startDataChangeFeed();
+startRequestEtaScheduler();
 app.listen(port, () => {
   console.log(`API running on http://localhost:${port}` );
 });

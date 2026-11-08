@@ -20,6 +20,7 @@ import PaymentConfirmationModal from './modals/PaymentConfirmationModal';
 import ChangeStatusModal from './modals/ChangeStatusModal';
 import DiscardRequestModal from './modals/DiscardRequestModal';
 import ViewReceiptModal from './modals/ViewReceiptModal';
+import RequestEtaModal from './modals/RequestEtaModal';
 
 import '../../styles/dashboard.css';
 
@@ -28,6 +29,7 @@ const REQUEST_STATUS_SUMMARY = [
   { status: 'PENDING PAYMENT', label: 'Pending payment' },
   { status: 'PAID', label: 'Paid' },
   { status: 'PROCESSING', label: 'Processing' },
+  { status: 'OVERDUE', label: 'Overdue' },
   { status: 'READY FOR PICKUP', label: 'For pickup' },
   { status: 'ON HOLD', label: 'On hold' },
 ];
@@ -54,6 +56,7 @@ function RegistrarDashboard() {
     reviewAsRegistrar,
     confirmPayment,
     startRequestProcessing,
+    updateRequestEta,
     markReadyForPickup,
     markPickedUp,
     markCommentsRead,
@@ -79,6 +82,7 @@ function RegistrarDashboard() {
   const [requestToDiscard, setRequestToDiscard] = useState(null);
   const [requestToChangeStatus, setRequestToChangeStatus] = useState(null);
   const [paymentConfirmationRequest, setPaymentConfirmationRequest] = useState(null);
+  const [etaDialog, setEtaDialog] = useState(null);
   const [isWalkInModalOpen, setIsWalkInModalOpen] = useState(false);
 
   const [localSearch, setLocalSearch] = useState(searchTerm);
@@ -91,7 +95,7 @@ function RegistrarDashboard() {
   useEffect(() => {
     const requestedFilter = location.state?.registrarStatusFilter;
     if (
-      (requestedFilter === 'PENDING REVIEW' || requestedFilter === 'PENDING PAYMENT')
+      (requestedFilter === 'PENDING REVIEW' || requestedFilter === 'PENDING PAYMENT' || requestedFilter === 'OVERDUE')
       && appliedNotificationFilterKey.current !== location.key
     ) {
       appliedNotificationFilterKey.current = location.key;
@@ -151,6 +155,7 @@ function RegistrarDashboard() {
         <div className="registrar-header-content">
           <h1 className="dashboard-title">Registrar Control Panel</h1>
           <p className="dashboard-subtext">Manage and process incoming student document requests.</p>
+          <p className="header-note">* Note: This portal assumes that online payment is available for the finance office and a method of delivery is available.</p>
           <button type="button" className="btn-primary" onClick={() => setIsWalkInModalOpen(true)}>
             Enter Walk-in Request
           </button>
@@ -229,6 +234,7 @@ function RegistrarDashboard() {
             <option value="PENDING PAYMENT">Filter: Pending payment</option>
             <option value="PAID">Filter: Paid</option>
             <option value="PROCESSING">Filter: Processing</option>
+            <option value="OVERDUE">Filter: Overdue</option>
             <option value="READY FOR PICKUP">Filter: For pickup</option>
             <option value="ON HOLD">Filter: On hold</option>
             <option value="CLEARANCE REVIEW">Filter: Clearance review</option>
@@ -317,14 +323,6 @@ function RegistrarDashboard() {
                   {/* Inline Action Buttons */}
                   <td className="actions-cell">
                     <div className="workflow-inline-actions">
-                      <button
-                        type="button"
-                        className={`workflow-step-button workflow-action-button${req.hasUnreadComments ? ' has-unread-comments' : ''}`}
-                        onClick={(e) => { e.stopPropagation(); setCommentingRequest(req); }}
-                      >
-                        Comments
-                      </button>
-
                       {['pending_review', 'on_hold'].includes(req.rawStatus) && (
                         <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); handleRegistrarReview(req.id, 'approved'); }}>
                           Approve
@@ -339,14 +337,20 @@ function RegistrarDashboard() {
                       )}
 
                       {req.rawStatus === 'paid' && (
-                        <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); startRequestProcessing(req.id); }}>
+                        <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); setEtaDialog({ request: req, isUpdating: false }); }}>
                           Start Processing
                         </button>
                       )}
 
-                      {req.rawStatus === 'processing' && (
+                      {['processing', 'overdue'].includes(req.rawStatus) && (
                         <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); handleReadyForPickup(req.id); }}>
                           Ready For Pickup
+                        </button>
+                      )}
+
+                      {['processing', 'overdue'].includes(req.rawStatus) && (
+                        <button type="button" className="workflow-step-button workflow-action-button" onClick={(e) => { e.stopPropagation(); setEtaDialog({ request: req, isUpdating: true }); }}>
+                          Update ETA
                         </button>
                       )}
 
@@ -355,6 +359,14 @@ function RegistrarDashboard() {
                           Record Pickup
                         </button>
                       )}
+
+                      <button
+                        type="button"
+                        className={`workflow-step-button workflow-action-button${req.hasUnreadComments ? ' has-unread-comments' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); setCommentingRequest(req); }}
+                      >
+                        Comment
+                      </button>
 
                       <button
                         type="button"
@@ -399,7 +411,7 @@ function RegistrarDashboard() {
             <button type="button" onClick={() => { setViewingReceiptRequest(activeMenuRequest); setOpenMenuId(null); }}>View Receipt</button>
           )}
 
-          {['pending_review', 'on_hold', 'pending_payment', 'clearance_review', 'paid', 'processing', 'ready_for_pickup'].includes(activeMenuRequest.rawStatus) && (
+          {['pending_review', 'on_hold', 'pending_payment', 'clearance_review', 'paid', 'processing', 'overdue', 'ready_for_pickup'].includes(activeMenuRequest.rawStatus) && (
             <>
               <div className="actions-menu-divider" />
               <button type="button" onClick={() => handleRegistrarReview(openMenuId, 'needs_information')}>Put on Hold</button>
@@ -424,6 +436,7 @@ function RegistrarDashboard() {
       <WalkInRequestModal isOpen={isWalkInModalOpen} onClose={() => setIsWalkInModalOpen(false)} onCreated={() => refreshRequests()} />
       
       <ChangeStatusModal 
+        key={requestToChangeStatus?.id || 'closed'}
         isOpen={!!requestToChangeStatus} 
         onClose={() => setRequestToChangeStatus(null)} 
         request={requestToChangeStatus} 
@@ -449,6 +462,22 @@ function RegistrarDashboard() {
         onClose={() => setViewingReceiptRequest(null)} 
         request={viewingReceiptRequest} 
       />
+
+      {etaDialog && (
+        <RequestEtaModal
+          key={`${etaDialog.request.id}-${etaDialog.isUpdating ? 'update' : 'start'}`}
+          isOpen
+          onClose={() => setEtaDialog(null)}
+          request={etaDialog.request}
+          isUpdating={etaDialog.isUpdating}
+          onSubmit={async (etaAt) => {
+            const result = etaDialog.isUpdating
+              ? await updateRequestEta(etaDialog.request.id, etaAt)
+              : await startRequestProcessing(etaDialog.request.id, etaAt);
+            if (result) setEtaDialog(null);
+          }}
+        />
+      )}
     </div>
   );
 }

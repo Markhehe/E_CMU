@@ -12,9 +12,10 @@ import { useServerEvents } from './useServerEvents';
 const STATUS_WEIGHTS = {
   'PENDING PAYMENT': 1,
   'PROCESSING': 2,
-  'READY FOR PICKUP': 3,
-  'FULFILLED': 4,
-  'REJECTED': 5,
+  'OVERDUE': 3,
+  'READY FOR PICKUP': 4,
+  'FULFILLED': 5,
+  'REJECTED': 6,
 };
 
 export function useRequests() {
@@ -115,7 +116,17 @@ export function useRequests() {
   );
 
   const startRequestProcessing = useCallback(
-    (id) => runWorkflowAction(() => DocumentService.startRequestProcessing(id), 'Document processing started.'),
+    (id, etaAt) => runWorkflowAction(() => DocumentService.startRequestProcessing(id, etaAt), 'Document processing started.'),
+    [runWorkflowAction]
+  );
+
+  const updateRequestEta = useCallback(
+    (id, etaAt) => runWorkflowAction(() => DocumentService.updateRequestEta(id, etaAt), 'Estimated availability time updated.'),
+    [runWorkflowAction]
+  );
+
+  const requestEtaUpdate = useCallback(
+    (id) => runWorkflowAction(() => DocumentService.requestEtaUpdate(id), 'Your ETA update request was sent to the Registrar.'),
     [runWorkflowAction]
   );
 
@@ -194,6 +205,8 @@ export function useRequests() {
     changeRequestStatus,
     confirmPayment,
     startRequestProcessing,
+    updateRequestEta,
+    requestEtaUpdate,
     markReadyForPickup,
     markPickedUp,
     markCommentsRead,

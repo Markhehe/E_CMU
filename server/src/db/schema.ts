@@ -36,6 +36,7 @@ export const requestStatus = pgEnum("request_status", [
   "clearance_review",
   "paid",
   "processing",
+  "overdue",
   "ready_for_pickup",
   "fulfilled",
   "rejected",
@@ -252,6 +253,10 @@ export const requests = pgTable(
       .notNull()
       .references(() => documentTypes.id),
     status: requestStatus("status").notNull().default("pending_review"),
+    etaAt: timestamp("eta_at", { withTimezone: true }),
+    etaUpdateRequestedAt: timestamp("eta_update_requested_at", {
+      withTimezone: true,
+    }),
     purpose: text("purpose"),
     additionalDetails: jsonb("additional_details")
       .$type<Record<string, unknown>>()

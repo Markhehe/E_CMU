@@ -32,6 +32,7 @@ const statusConfig = {
   'pending clearance': { class: 'status-pending', icon: icons.clock },
   'paid': { class: 'status-paid', icon: icons.check },
   'processing': { class: 'status-processing', icon: icons.sync },
+  'overdue': { class: 'status-danger', icon: icons.alert },
   'ready for pickup': { class: 'status-success', icon: icons.check },
   'fulfilled': { class: 'status-success', icon: icons.check },
   'cleared': { class: 'status-success', icon: icons.check },

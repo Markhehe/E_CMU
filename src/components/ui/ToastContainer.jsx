@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import './toast.css';
 
 function ToastItem({ toast, dismissToast, removeToast }) {
@@ -34,7 +35,7 @@ function ToastItem({ toast, dismissToast, removeToast }) {
 }
 
 export default function ToastContainer({ toasts, dismissToast, removeToast }) {
-  return (
+  return createPortal(
     <div className="toast-container">
       {toasts.map((toast) => (
         <ToastItem 
@@ -44,6 +45,7 @@ export default function ToastContainer({ toasts, dismissToast, removeToast }) {
           removeToast={removeToast} 
         />
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }

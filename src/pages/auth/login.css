@@ -153,6 +153,19 @@
   text-align: left;
 }
 
+.registration-disclaimer {
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(238, 168, 64, 0.5);
+  border-left: 4px solid var(--honey-bronze);
+  border-radius: var(--radius-sm);
+  background-color: var(--parchment);
+  color: var(--imperial-blue);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  text-align: left;
+}
+
 .registration-consent {
   display: flex;
   align-items: flex-start;
@@ -174,6 +187,53 @@
 .registration-consent input:focus-visible {
   outline: 2px solid var(--honey-bronze);
   outline-offset: 2px;
+}
+
+.registration-policy-link {
+  display: inline;
+  padding: 0;
+  color: var(--imperial-blue);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.registration-policy-link:hover {
+  color: var(--honey-bronze);
+}
+
+.registration-policy-link:focus-visible {
+  outline: 2px solid var(--honey-bronze);
+  outline-offset: 2px;
+}
+
+.registration-policy-notice {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.registration-policy-content {
+  max-height: min(60vh, 32rem);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+  color: var(--text-dark);
+  line-height: 1.6;
+}
+
+.registration-policy-content section + section {
+  margin-top: 1.25rem;
+}
+
+.registration-policy-content h3 {
+  margin-bottom: 0.4rem;
+  font-size: 1rem;
+}
+
+.registration-policy-content p + p {
+  margin-top: 0.65rem;
 }
 
 /* Input Fields & Password Wrapper */

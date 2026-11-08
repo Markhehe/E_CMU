@@ -58,7 +58,10 @@ async function applyPendingLegacyMigrations() {
     }
 }
 
-async function validateExistingDrizzleHistory(migrations) {
+async function validateExistingDrizzleHistory(
+    migrations,
+    { allowLegacyBaselineAdoption = false } = {},
+) {
     if (!(await tableExists("drizzle.__drizzle_migrations"))) {
         return { exists: false, rows: [] };
     }
@@ -67,15 +70,35 @@ async function validateExistingDrizzleHistory(migrations) {
         "SELECT hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at",
     );
     const knownHashes = new Set(migrations.map(({ hash }) => hash));
-    const unknownHash = result.rows.find(({ hash }) => !knownHashes.has(hash));
-    if (unknownHash) {
-        throw new Error(
-            "The Drizzle migration ledger contains an unrecognized history; refusing to alter it automatically.",
+    const unknownRows = result.rows.filter(({ hash }) => !knownHashes.has(hash));
+    const baseline = migrations[0];
+    const hasCurrentBaseline = result.rows.some(({ hash }) => hash === baseline?.hash);
+    const canAdoptLegacyBaseline =
+        allowLegacyBaselineAdoption &&
+        migrations.length === 1 &&
+        baseline &&
+        (
+            (result.rows.length === 1 &&
+                unknownRows.length === 1 &&
+                Number(unknownRows[0].created_at) < baseline.folderMillis) ||
+            (result.rows.length === 2 &&
+                hasCurrentBaseline &&
+                unknownRows.length === 1 &&
+                Number(unknownRows[0].created_at) < baseline.folderMillis)
         );
+
+    if (unknownRows.length > 0) {
+        if (!canAdoptLegacyBaseline) {
+            throw new Error(
+                "The Drizzle migration ledger contains an unrecognized history; refusing to alter it automatically.",
+            );
+        }
     }
 
-    const baseline = migrations[0];
-    if (result.rows.length > 0 && !result.rows.some(({ hash }) => hash === baseline?.hash)) {
+    if (result.rows.length > 0 && !hasCurrentBaseline) {
+        if (canAdoptLegacyBaseline) {
+            return { exists: true, rows: result.rows, canAdoptLegacyBaseline: true };
+        }
         throw new Error(
             "The database has a separate Drizzle history; inspect it before adopting the current baseline.",
         );
@@ -97,7 +120,9 @@ async function adoptLegacyDatabase(migrations) {
         )
     `);
 
-    const applied = await validateExistingDrizzleHistory(migrations);
+    const applied = await validateExistingDrizzleHistory(migrations, {
+        allowLegacyBaselineAdoption: true,
+    });
 
     if (applied.rows.length === 0) {
         await pool.query(
@@ -106,8 +131,18 @@ async function adoptLegacyDatabase(migrations) {
             [baseline.hash, baseline.folderMillis],
         );
     } else if (!applied.rows.some(({ hash }) => hash === baseline.hash)) {
-        throw new Error(
-            "The legacy database has a separate Drizzle history; inspect it before adopting the current baseline.",
+        if (!applied.canAdoptLegacyBaseline) {
+            throw new Error(
+                "The legacy database has a separate Drizzle history; inspect it before adopting the current baseline.",
+            );
+        }
+        await pool.query(
+            `INSERT INTO drizzle.__drizzle_migrations (hash, created_at)
+             VALUES ($1, $2)`,
+            [baseline.hash, baseline.folderMillis],
+        );
+        console.log(
+            "Adopted the current Drizzle baseline after validating the legacy migration history.",
         );
     }
 }
@@ -118,7 +153,9 @@ async function runMigrations() {
     });
     const legacyHistoryExists = await tableExists("public.migrations");
     const applicationSchemaExists = await tableExists("public.users");
-    const drizzleHistory = await validateExistingDrizzleHistory(migrations);
+    const drizzleHistory = await validateExistingDrizzleHistory(migrations, {
+        allowLegacyBaselineAdoption: legacyHistoryExists && applicationSchemaExists,
+    });
 
     if (legacyHistoryExists) {
         if (drizzleHistory.exists && drizzleHistory.rows.length === 0) {

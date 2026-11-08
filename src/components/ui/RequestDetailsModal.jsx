@@ -152,6 +152,22 @@ const RequestDetailsModal = ({ isOpen, onClose, request, onOpenStudent }) => {
           </span>
         </div>
 
+        {request.etaAt && !['ready_for_pickup', 'ready_for_retrieval', 'ready'].includes(request.rawStatus) && (
+          <div className="detail-row" style={rowStyle}>
+            <span style={labelStyle}>Estimated Time of Availability</span>
+            <span style={valueStyle}>
+              {new Intl.DateTimeFormat('en-PH', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+              }).format(new Date(request.etaAt))}
+            </span>
+          </div>
+        )}
+
         {/* Dedicated Purpose Box */}
         <div
           className="purpose-box"

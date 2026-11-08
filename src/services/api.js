@@ -4,7 +4,7 @@
  * error normalization, and request formatting.
  */
 
-export const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
 // Helper purely for data transformation, not UI validation
 function readFileAsDataUrl(file) {
@@ -76,6 +76,7 @@ export const STATUS_LABELS = {
   clearance_review: 'CLEARANCE REVIEW',
   paid: 'PAID',
   processing: 'PROCESSING',
+  overdue: 'OVERDUE',
   ready: 'READY FOR PICKUP',
   ready_for_retrieval: 'READY FOR PICKUP',
   fulfilled: 'FULFILLED',
@@ -133,6 +134,8 @@ export function formatRequest(request = {}) {
     quantity: Number(additionalDetails.quantity || 1),
     rawStatus,
     status: STATUS_LABELS[rawStatus] || rawStatus.toUpperCase(),
+    etaAt: request.etaAt || request.eta_at || null,
+    etaUpdateRequestedAt: request.etaUpdateRequestedAt || request.eta_update_requested_at || null,
     paymentMethod,
     paymentReference,
     orNumber,
@@ -279,8 +282,22 @@ export const DocumentService = {
   async markRequestReadyForPickup(requestId) {
     return apiRequest(`/requests/${encodeURIComponent(requestId)}/ready-for-pickup`, { method: 'POST' });
   },
-  async startRequestProcessing(requestId) {
-    return apiRequest(`/requests/${encodeURIComponent(requestId)}/start-processing`, { method: 'POST' });
+  async startRequestProcessing(requestId, etaAt) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/start-processing`, {
+      method: 'POST',
+      body: JSON.stringify({ etaAt }),
+    });
+  },
+  async updateRequestEta(requestId, etaAt) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/eta`, {
+      method: 'PUT',
+      body: JSON.stringify({ etaAt }),
+    });
+  },
+  async requestEtaUpdate(requestId) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/request-eta-update`, {
+      method: 'POST',
+    });
   },
   async markRequestPickedUp(requestId) {
     return apiRequest(`/requests/${encodeURIComponent(requestId)}/pickup`, { method: 'POST' });

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Modal from '../../../components/ui/Modal';
 
 const DIRECT_STATUS_OPTIONS = [
@@ -6,6 +6,7 @@ const DIRECT_STATUS_OPTIONS = [
   { value: 'pending_payment', label: 'Pending payment' },
   { value: 'paid', label: 'Paid' },
   { value: 'processing', label: 'Processing' },
+  { value: 'overdue', label: 'Overdue' },
   { value: 'ready_for_pickup', label: 'For pickup' },
   { value: 'on_hold', label: 'On hold' },
   { value: 'clearance_review', label: 'Clearance review' },
@@ -14,15 +15,8 @@ const DIRECT_STATUS_OPTIONS = [
 ];
 
 export default function ChangeStatusModal({ isOpen, onClose, request, onSubmit }) {
-  const [selectedNextStatus, setSelectedNextStatus] = useState('');
+  const [selectedNextStatus, setSelectedNextStatus] = useState(request?.rawStatus || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Sync state when modal opens
-  useEffect(() => {
-    if (isOpen && request) {
-      setSelectedNextStatus(request.rawStatus);
-    }
-  }, [isOpen, request]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

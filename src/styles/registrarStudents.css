@@ -332,8 +332,9 @@
 
   .student-records-page .student-records-table {
     flex: 0 1 auto;
-    max-height: min(48vh, 400px);
-    min-height: 220px;
+    height: min(65vh, 620px);
+    max-height: none;
+    min-height: min(360px, 60vh);
   }
 
   .student-records-toolbar {

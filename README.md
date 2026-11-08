@@ -59,10 +59,24 @@ directory-only record. All newly created demo accounts use
 existing passwords. Students must still submit clearance through the portal
 before making requests.
 
-The API defaults to `http://localhost:5000`; the frontend defaults to
-`http://localhost:5173`. The frontend signs in through the API and loads the
-document catalog and requests from PostgreSQL. To use another API URL, set
-`VITE_API_URL` in the frontend environment.
+The API listens on `http://localhost:5000`; the frontend defaults to
+`http://localhost:5173` and proxies `/api` requests to the API during local
+development. In production, the frontend calls the same-origin `/api` path.
+To use another API URL, set `VITE_API_URL` in the frontend environment.
+
+## Deploy to Vercel
+
+The root `vercel.json` configures two services in one Vercel project:
+
+- `app` builds the Vite frontend from the repository root and serves `/`.
+- `server` runs the Express API from `server/`; `/api/*` is routed to it.
+
+Set the API's `DATABASE_URL`, `JWT_SECRET`, and required SMTP variables
+(`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, and
+`SMTP_FROM`) in the Vercel project's Environment Variables for the environments
+you deploy. Do not commit credentials. Apply the database migrations to your
+hosted PostgreSQL database before using the deployed portal. The frontend and
+API share the Vercel domain, so `VITE_API_URL` is not required for this setup.
 
 New student accounts must match a directory record, then confirm their university email address using the
 six-digit code sent during registration before they can sign in. Codes expire
