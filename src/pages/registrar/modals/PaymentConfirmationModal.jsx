@@ -1,19 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Modal from '../../../components/ui/Modal';
 
-export default function PaymentConfirmationModal({ isOpen, onClose, request, onSubmit }) {
-  const [paymentProofSource, setPaymentProofSource] = useState('physical');
+export default function PaymentConfirmationModal({ isOpen, onClose, request, onSubmit, onReject }) {
+  const [paymentProofSource, setPaymentProofSource] = useState(() => (
+    request?.receiptUrl && request?.requestCopyUrl ? 'uploaded' : 'physical'
+  ));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRejectingProof, setIsRejectingProof] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
-  // 1. Clean boolean check: True if AT LEAST ONE image exists
   const hasUploadedProof = Boolean(request?.receiptUrl && request?.requestCopyUrl);
-
-  // 2. Sync state when modal opens using the new boolean
-  useEffect(() => {
-    if (isOpen && request) {
-      setPaymentProofSource(hasUploadedProof ? 'uploaded' : 'physical');
-    }
-  }, [isOpen, request, hasUploadedProof]);
 
   const handleSubmit = async () => {
     if (!request || isSubmitting) return;
@@ -21,7 +17,7 @@ export default function PaymentConfirmationModal({ isOpen, onClose, request, onS
     
     setIsSubmitting(true);
     try {
-      await onSubmit(request.id, {
+      const result = await onSubmit(request.id, {
         method: 'cash',
         amount: request.feeAmount,
         currency: request.feeCurrency || 'PHP',
@@ -29,7 +25,19 @@ export default function PaymentConfirmationModal({ isOpen, onClose, request, onS
           ? 'Cash payment proof and printed request verified from website upload'
           : 'Physical cash receipt and printed request verified by Registrar',
       });
-      onClose();
+      if (result) onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!request || isSubmitting || !rejectionReason.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      const result = await onReject(request.id, rejectionReason.trim());
+      if (result) onClose();
     } finally {
       setIsSubmitting(false);
     }
@@ -69,6 +77,26 @@ export default function PaymentConfirmationModal({ isOpen, onClose, request, onS
               <span>Uploaded on the website</span>
             </label>
           </fieldset>
+
+          {isRejectingProof && (
+            <div className="payment-proof-rejection">
+              <label className="auth-label" htmlFor="payment-proof-rejection-reason">
+                Reason for rejecting the uploaded proof
+              </label>
+              <textarea
+                id="payment-proof-rejection-reason"
+                className="auth-input"
+                value={rejectionReason}
+                onChange={(event) => setRejectionReason(event.target.value)}
+                maxLength={240}
+                minLength={3}
+                rows={3}
+                required
+                disabled={isSubmitting}
+                placeholder="Explain what needs to be corrected so the student can resubmit."
+              />
+            </div>
+          )}
 
           {/* Restored and updated Image Preview Logic */}
           {paymentProofSource === 'uploaded' && (
@@ -124,14 +152,46 @@ export default function PaymentConfirmationModal({ isOpen, onClose, request, onS
             >
               Cancel
             </button>
-            <button 
-              type="button" 
-              className="btn-primary" 
-              onClick={handleSubmit} 
-              disabled={isSubmitting || (paymentProofSource === 'uploaded' && !hasUploadedProof)}
-            >
-              {isSubmitting ? 'Confirming...' : 'Confirm payment'}
-            </button>
+            {hasUploadedProof && onReject && !isRejectingProof && (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setIsRejectingProof(true)}
+                disabled={isSubmitting}
+              >
+                Reject proof
+              </button>
+            )}
+            {isRejectingProof ? (
+              <>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setIsRejectingProof(false)}
+                  disabled={isSubmitting}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleReject}
+                  disabled={isSubmitting || rejectionReason.trim().length < 3}
+                  style={{ backgroundColor: 'var(--danger, #b42318)' }}
+                >
+                  {isSubmitting ? 'Rejecting...' : 'Reject proof'}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleSubmit}
+                disabled={isSubmitting || (paymentProofSource === 'uploaded' && !hasUploadedProof)}
+              >
+                {isSubmitting ? 'Confirming...' : 'Confirm payment'}
+              </button>
+            )}
           </div>
         </div>
       )}

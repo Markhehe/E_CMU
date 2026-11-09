@@ -23,6 +23,9 @@ import RegistrarDashboard from './pages/registrar/RegistrarDashboard';
 import RegistrarClearanceDashboard from './pages/registrar/RegistrarClearanceDashboard';
 import RegistrarStudents from './pages/registrar/RegistrarStudents';
 import RegistrarStaffManagement from './pages/registrar/RegistrarStaffManagement';
+import RegistrarStudentEntry from './pages/registrar/RegistrarStudentEntry';
+import RegistrarStudentDirectory from './pages/registrar/RegistrarStudentDirectory';
+import RegistrarAuditLog from './pages/registrar/RegistrarAuditLog';
 import Settings from './pages/Settings';
 import ActionCooldown from './components/ui/ActionCooldown';
 
@@ -210,10 +213,34 @@ function App() {
           <Route path="/registrar/clearance" element={<RegistrarClearanceDashboard />} />
           <Route path="/registrar/students" element={<RegistrarStudents />} />
           <Route
+            path="/registrar/student-entry"
+            element={
+              <ProtectedRoute allowedRole="REGISTRAR" requireRegistrarAdmin>
+                <RegistrarStudentEntry />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/registrar/student-directory"
+            element={
+              <ProtectedRoute allowedRole="REGISTRAR" requireRegistrarAdmin>
+                <RegistrarStudentDirectory />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/registrar/staff"
             element={
               <ProtectedRoute allowedRole="REGISTRAR" requireRegistrarAdmin>
                 <RegistrarStaffManagement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/registrar/audit-log"
+            element={
+              <ProtectedRoute allowedRole="REGISTRAR" requireRegistrarAdmin>
+                <RegistrarAuditLog />
               </ProtectedRoute>
             }
           />

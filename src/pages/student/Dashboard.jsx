@@ -256,6 +256,11 @@ function Dashboard() {
                       {req.rawStatus === 'pending_payment' && req.hasReceipt && (
                         <span className="status-alert">Receipt submitted - awaiting Registrar</span>
                       )}
+                      {req.rawStatus === 'pending_payment' && req.paymentProofRejectedReason && (
+                        <span className="payment-proof-rejection-alert">
+                          Payment proof rejected: {req.paymentProofRejectedReason}. Upload corrected proof.
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="actions-cell">

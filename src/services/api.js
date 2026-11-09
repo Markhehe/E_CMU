@@ -134,6 +134,11 @@ export function formatRequest(request = {}) {
     quantity: Number(additionalDetails.quantity || 1),
     rawStatus,
     status: STATUS_LABELS[rawStatus] || rawStatus.toUpperCase(),
+    assignedTo: request.assignedTo == null && request.assigned_to == null
+      ? null
+      : String(request.assignedTo ?? request.assigned_to),
+    assignedName: request.assignedName || request.assigned_name || '',
+    terminalActionName: request.terminalActionName || request.terminal_action_name || '',
     etaAt: request.etaAt || request.eta_at || null,
     etaUpdateRequestedAt: request.etaUpdateRequestedAt || request.eta_update_requested_at || null,
     paymentMethod,
@@ -150,6 +155,10 @@ export function formatRequest(request = {}) {
     collectionMethod: additionalDetails.collectionMethod || 'Pickup',
     commentCount: Number(request.commentCount ?? request.comment_count ?? 0),
     rejectionReason: request.rejectionReason || request.rejection_reason || null,
+    paymentProofRejectedReason:
+      additionalDetails.paymentProofRejectedReason ||
+      additionalDetails.payment_proof_rejected_reason ||
+      '',
     hasUnreadComments: Boolean(request.hasUnreadComments ?? request.has_unread_comments),
   };
 }
@@ -161,10 +170,34 @@ export const AuthService = {
       body: JSON.stringify({ email, password }),
     });
   },
+  async resendStudentLoginCode(email, password) {
+    return apiRequest('/auth/login/resend-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  },
+  async verifyStudentLoginCode(email, code) {
+    return apiRequest('/auth/login/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    });
+  },
   async register({ email, password }) {
     return apiRequest('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
+    });
+  },
+  async verifyRegistrationCode(email, code) {
+    return apiRequest('/auth/register/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ email, code }),
+    });
+  },
+  async resendRegistrationCode(email) {
+    return apiRequest('/auth/register/resend-code', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
     });
   },
   async requestPasswordReset(email) {
@@ -215,6 +248,30 @@ export const DocumentService = {
     const result = await apiRequest('/requests');
     const list = result.requests || (Array.isArray(result) ? result : []);
     return list.map(formatRequest);
+  },
+  async getRegistrarRequests({
+    page,
+    pageSize,
+    search,
+    view,
+    sort,
+    showFulfilled,
+    showRejected,
+  }) {
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+      search,
+      view,
+      sort,
+      showFulfilled: String(showFulfilled),
+      showRejected: String(showRejected),
+    });
+    const result = await apiRequest(`/requests/registrar?${params.toString()}`);
+    return {
+      ...result,
+      requests: (result.requests || []).map(formatRequest),
+    };
   },
   async getRequestById(requestId) {
     const result = await apiRequest(`/requests/${encodeURIComponent(requestId)}`);
@@ -277,6 +334,12 @@ export const DocumentService = {
       body: JSON.stringify({
         method, amount, currency, status: 'succeeded', providerReference, notes,
       }),
+    });
+  },
+  async rejectRequestPaymentProof(requestId, reason) {
+    return apiRequest(`/requests/${encodeURIComponent(requestId)}/payment-proof/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     });
   },
   async markRequestReadyForPickup(requestId) {
@@ -428,9 +491,49 @@ export const RegistrarStaffService = {
     });
     return result.staff;
   },
-  async remove(id) {
-    return apiRequest(`/admin/registrar-staff/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
+};
+
+export const AuditLogService = {
+  async list(filters = {}) {
+    const params = new URLSearchParams({
+      page: String(filters.page || 1),
+      pageSize: String(filters.pageSize || 25),
+    });
+    for (const key of ['from', 'to', 'actor', 'action', 'entityType', 'entityId']) {
+      if (filters[key]) params.set(key, filters[key]);
+    }
+    return apiRequest(`/admin/audit-logs?${params.toString()}`);
+  },
+};
+
+export const StudentDirectoryService = {
+  async list({ search = '', page = 1 } = {}) {
+    const params = new URLSearchParams({ search, page: String(page) });
+    return apiRequest(`/students/directory?${params.toString()}`);
+  },
+  async setAccountActive(studentId, active) {
+    return apiRequest(`/students/directory/${encodeURIComponent(studentId)}/account`, {
+      method: 'PATCH',
+      body: JSON.stringify({ active }),
+    });
+  },
+  async suspendAccountsByPrefix(prefix) {
+    return apiRequest('/students/directory/suspend-prefix', {
+      method: 'POST',
+      body: JSON.stringify({ prefix }),
+    });
+  },
+  async findExisting(studentIds) {
+    const result = await apiRequest('/students/directory/check', {
+      method: 'POST',
+      body: JSON.stringify({ studentIds }),
+    });
+    return result.studentIds || [];
+  },
+  async add(records) {
+    return apiRequest('/students/directory', {
+      method: 'POST',
+      body: JSON.stringify({ records }),
     });
   },
 };

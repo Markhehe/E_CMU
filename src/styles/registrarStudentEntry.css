@@ -1,0 +1,264 @@
+.registrar-student-entry-page {
+  gap: 1rem;
+  overflow: auto;
+}
+
+.registrar-student-entry-page .dashboard-header {
+  margin-bottom: 0;
+}
+
+.registrar-entry-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--surface-white);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.registrar-entry-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+}
+
+.registrar-entry-heading .settings-section-title,
+.registrar-entry-heading .dashboard-subtext {
+  margin: 0;
+}
+
+.registrar-entry-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  align-items: end;
+  gap: 1rem;
+  padding: 0 1rem 1rem;
+}
+
+.registrar-entry-form label,
+.registrar-entry-json {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--imperial-blue);
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.registrar-entry-form label small {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.registrar-entry-form .btn-primary {
+  min-height: 2.8rem;
+}
+
+.registrar-entry-bulk-options {
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.8fr) minmax(20rem, 1.2fr);
+  gap: 1rem;
+  padding: 0 1rem 1rem;
+}
+
+.registrar-entry-upload-panel {
+  display: grid;
+  align-content: start;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.registrar-entry-file-drop {
+  display: flex;
+  min-height: 18rem;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 1.5rem;
+  border: 2px dashed #cbd6e5;
+  border-radius: var(--radius-md);
+  background:
+    radial-gradient(ellipse at top, rgba(2, 35, 96, 0.055), transparent 68%),
+    #fbfcfe;
+  color: var(--imperial-blue);
+  text-align: center;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.registrar-entry-file-drop.is-drag-active,
+.registrar-entry-file-drop:focus-within {
+  border-color: var(--imperial-blue);
+  background-color: #f0f5ff;
+  box-shadow: 0 0 0 3px rgba(2, 35, 96, 0.09);
+}
+
+.registrar-entry-file-drop.has-file {
+  border-color: #9ab4d6;
+  background-color: #f7faff;
+}
+
+.registrar-entry-file-input {
+  display: none;
+}
+
+.registrar-entry-upload-icon {
+  display: grid;
+  width: 3.25rem;
+  height: 3.25rem;
+  place-items: center;
+  border: 1px solid #dbe5f1;
+  border-radius: 1rem;
+  background: #fff;
+  color: var(--imperial-blue);
+  box-shadow: 0 4px 12px rgba(2, 35, 96, 0.08);
+}
+
+.registrar-entry-upload-icon svg {
+  width: 1.65rem;
+  height: 1.65rem;
+}
+
+.registrar-entry-file-drop > strong {
+  max-width: 100%;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.registrar-entry-file-drop > .registrar-entry-selected-file {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registrar-entry-file-hint {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.registrar-entry-file-drop .registrar-entry-choose-file {
+  margin-top: 0.2rem;
+}
+
+.registrar-entry-file-types {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.registrar-entry-file-types span {
+  padding: 0.2rem 0.45rem;
+  border: 1px solid #dfe6ef;
+  border-radius: 0.35rem;
+  background: #fff;
+  color: #43536b;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+}
+
+.registrar-entry-file-types small {
+  margin-left: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.registrar-entry-file-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.registrar-entry-json textarea {
+  min-height: 8rem;
+  resize: vertical;
+  font-family: var(--font-mono, monospace);
+  font-weight: 400;
+}
+
+.registrar-entry-json .btn-secondary {
+  justify-self: start;
+}
+
+.registrar-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.registrar-entry-error {
+  margin: 0;
+  color: #a51d24;
+  font-weight: 650;
+}
+
+.registrar-entry-table-wrap {
+  overflow: auto;
+  border-top: 1px solid var(--border-light);
+}
+
+.registrar-entry-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.registrar-entry-table th,
+.registrar-entry-table td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border-light);
+  white-space: nowrap;
+}
+
+.registrar-entry-table th {
+  color: var(--imperial-blue);
+  font-size: 0.8rem;
+}
+
+.registrar-entry-existing-row {
+  background: #fff3e8;
+}
+
+.registrar-entry-status {
+  display: inline-flex;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.registrar-entry-status.is-existing {
+  background: #ffe2cc;
+  color: #8a3c00;
+}
+
+.registrar-entry-status.is-new {
+  background: #e7f5ec;
+  color: #176b36;
+}
+
+.registrar-entry-more {
+  margin: 0;
+  padding: 0.6rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 700px) {
+  .registrar-entry-bulk-options {
+    grid-template-columns: 1fr;
+  }
+
+  .registrar-entry-file-drop {
+    min-height: 16rem;
+    padding: 1.1rem;
+  }
+}

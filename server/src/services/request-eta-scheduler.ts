@@ -7,7 +7,7 @@ async function markOverdueRequests() {
     await pool.query(`
       WITH overdue_requests AS (
         UPDATE requests
-        SET status = 'overdue', updated_at = NOW()
+        SET status = 'overdue', assigned_to = NULL, updated_at = NOW()
         WHERE status = 'processing'
           AND eta_at IS NOT NULL
           AND eta_at <= NOW()
@@ -20,6 +20,19 @@ async function markOverdueRequests() {
                'Estimated availability time passed before request was marked ready'
         FROM overdue_requests
         RETURNING request_id
+      ),
+      inserted_audit AS (
+        INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+        SELECT NULL, 'request.status_changed', 'request', overdue.id::text,
+               jsonb_build_object(
+                 'fromStatus', 'processing',
+                 'toStatus', 'overdue',
+                 'displayCode', overdue.display_code
+               )
+        FROM overdue_requests AS overdue
+        INNER JOIN inserted_history
+          ON inserted_history.request_id = overdue.id
+        RETURNING id
       )
       INSERT INTO notifications
         (user_id, request_id, channel, type, title, message)

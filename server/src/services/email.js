@@ -53,6 +53,32 @@ export async function sendPasswordResetCodeEmail({ email, fullName, code }) {
     });
 }
 
+export async function sendStudentRegistrationCodeEmail({ email, fullName, code }) {
+    const transport = createTransport();
+    const safeName = escapeHtml(fullName);
+
+    await transport.sendMail({
+        from: process.env.SMTP_FROM,
+        to: email,
+        subject: "Verify your E-CMU Portal student account",
+        text: `Hello ${fullName},\n\nYour E-CMU Portal student registration verification code is ${code}.\nEnter this code in the portal within 10 minutes to activate your account.\n\nIf you did not start this registration, you can ignore this email.`,
+        html: `<p>Hello ${safeName},</p><p>Your E-CMU Portal student registration verification code is:</p><p style="font-size:2rem;font-weight:bold;letter-spacing:0.3rem">${code}</p><p>Enter this code in the portal within 10 minutes to activate your account.</p><p>If you did not start this registration, you can ignore this email.</p>`,
+    });
+}
+
+export async function sendStudentLoginCodeEmail({ email, fullName, code }) {
+    const transport = createTransport();
+    const safeName = escapeHtml(fullName);
+
+    await transport.sendMail({
+        from: process.env.SMTP_FROM,
+        to: email,
+        subject: "Your E-CMU Portal sign-in verification code",
+        text: `Hello ${fullName},\n\nYour E-CMU Portal sign-in verification code is ${code}.\nEnter this code in the portal within 10 minutes to complete your sign-in.\n\nIf you did not try to sign in, you can ignore this email.`,
+        html: `<p>Hello ${safeName},</p><p>Your E-CMU Portal sign-in verification code is:</p><p style="font-size:2rem;font-weight:bold;letter-spacing:0.3rem">${code}</p><p>Enter this code in the portal within 10 minutes to complete your sign-in.</p><p>If you did not try to sign in, you can ignore this email.</p>`,
+    });
+}
+
 export async function sendReadyForPickupEmail({
     email,
     fullName,
@@ -142,5 +168,27 @@ export async function sendPaymentReceivedEmail({
         text: `Hello ${fullName},\n\nThe Registrar has confirmed receipt of your payment.\n\nRequest: ${requestCode}\nDocument: ${documentName}\nAmount: ${new Intl.NumberFormat("en", { style: "currency", currency }).format(amount)}\nPayment method: ${method}${referenceText}\nConfirmed: ${new Date(paidAt).toLocaleString()}\n\nYour submitted payment receipt is attached when available.`,
         html: `<p>Hello ${safeName},</p><p>The Registrar has confirmed receipt of your payment.</p><dl><dt><strong>Request</strong></dt><dd>${safeRequestCode}</dd><dt><strong>Document</strong></dt><dd>${safeDocumentName}</dd><dt><strong>Amount</strong></dt><dd>${safeAmount}</dd><dt><strong>Payment method</strong></dt><dd>${safeMethod}</dd></dl>${referenceHtml}<p><strong>Confirmed:</strong> ${safePaidAt}</p><p>Your submitted payment receipt is attached when available.</p>`,
         attachments,
+    });
+}
+
+export async function sendPaymentProofRejectedEmail({
+    email,
+    fullName,
+    documentName,
+    requestCode,
+    reason,
+}) {
+    const transport = createTransport();
+    const safeName = escapeHtml(fullName);
+    const safeDocumentName = escapeHtml(documentName);
+    const safeRequestCode = escapeHtml(requestCode);
+    const safeReason = escapeHtml(reason);
+
+    await transport.sendMail({
+        from: process.env.SMTP_FROM,
+        to: email,
+        subject: `Payment proof needs correction for request ${requestCode}`,
+        text: `Hello ${fullName},\n\nThe payment proof for your ${documentName} request (${requestCode}) was rejected.\n\nReason: ${reason}\n\nPlease sign in to the E-CMU Portal and upload a corrected cash receipt and printed request copy.`,
+        html: `<p>Hello ${safeName},</p><p>The payment proof for your <strong>${safeDocumentName}</strong> request (<strong>${safeRequestCode}</strong>) was rejected.</p><p><strong>Reason:</strong> ${safeReason}</p><p>Please sign in to the E-CMU Portal and upload a corrected cash receipt and printed request copy.</p>`,
     });
 }

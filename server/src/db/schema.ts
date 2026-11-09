@@ -211,6 +211,27 @@ export const emailVerificationTokens = pgTable(
   ],
 );
 
+export const studentLoginVerificationTokens = pgTable(
+  "student_login_verification_tokens",
+  {
+    userId: bigint("user_id", { mode: "number" })
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    codeHash: char("code_hash", { length: 64 }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    attempts: smallint("attempts").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "student_login_verification_tokens_attempts_check",
+      sql`${table.attempts} between 0 and 5`,
+    ),
+  ],
+);
+
 export const documentTypes = pgTable(
   "document_types",
   {

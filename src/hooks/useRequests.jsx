@@ -4,7 +4,7 @@
  * and server actions with automatic toast notifications.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DocumentService } from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import { useServerEvents } from './useServerEvents';
@@ -18,7 +18,9 @@ const STATUS_WEIGHTS = {
   'REJECTED': 6,
 };
 
-export function useRequests() {
+const REGISTRAR_PAGE_SIZE = 20;
+
+export function useRequests({ registrarDashboard = false } = {}) {
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true); // Initial mount load
   const [isFetching, setIsFetching] = useState(false); // Background syncs
@@ -27,33 +29,76 @@ export function useRequests() {
   const { addToast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState(
+    'ALL',
+  );
   const [sortOption, setSortOption] = useState('DATE_DESC');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    pageSize: REGISTRAR_PAGE_SIZE,
+    totalRequests: 0,
+    totalPages: 1,
+  });
+  const [statusCounts, setStatusCounts] = useState({});
   const [showFulfilledRequests, setShowFulfilledRequests] = useState(true);
   const [showRejectedRequests, setShowRejectedRequests] = useState(true);
+  const fetchSequence = useRef(0);
 
   // Fetch with explicit options for initial loads vs background syncs
   const fetchRequests = useCallback(async (options = { background: false }) => {
+    const requestSequence = ++fetchSequence.current;
     if (!options.background) setIsLoading(true);
     setIsFetching(true);
     setError(null);
 
     try {
-      const data = await DocumentService.getAllRequests();
-      const formattedData = data.map((req) => ({
+      const data = registrarDashboard
+        ? await DocumentService.getRegistrarRequests({
+          page: currentPage,
+          pageSize: REGISTRAR_PAGE_SIZE,
+          search: searchTerm,
+          view: statusFilter,
+          sort: sortOption,
+          showFulfilled: showFulfilledRequests,
+          showRejected: showRejectedRequests,
+        })
+        : await DocumentService.getAllRequests();
+      if (requestSequence !== fetchSequence.current) return;
+      const requestData = registrarDashboard ? data.requests : data;
+      const formattedData = requestData.map((req) => ({
         ...req,
         date: req.dateRequested || req.rawDate || req.date || '',
       }));
       setRequests(formattedData);
+      if (registrarDashboard) {
+        setPagination(data.pagination);
+        setStatusCounts(data.statusCounts);
+        if (data.pagination.page !== currentPage) {
+          setCurrentPage(data.pagination.page);
+        }
+      }
     } catch (err) {
+      if (requestSequence !== fetchSequence.current) return;
       const msg = err.message || 'Failed to load document requests.';
       setError(msg);
       addToast(msg, 'error');
     } finally {
-      setIsLoading(false);
-      setIsFetching(false);
+      if (requestSequence === fetchSequence.current) {
+        setIsLoading(false);
+        setIsFetching(false);
+      }
     }
-  }, [addToast]);
+  }, [
+    addToast,
+    currentPage,
+    registrarDashboard,
+    searchTerm,
+    sortOption,
+    showFulfilledRequests,
+    showRejectedRequests,
+    statusFilter,
+  ]);
 
   const refreshRequests = useCallback(() => fetchRequests({ background: true }), [fetchRequests]);
 
@@ -110,6 +155,14 @@ export function useRequests() {
     [runWorkflowAction]
   );
 
+  const rejectPaymentProof = useCallback(
+    (id, reason) => runWorkflowAction(
+      () => DocumentService.rejectRequestPaymentProof(id, reason),
+      'Payment proof rejected. The student was notified and can upload corrected documents.',
+    ),
+    [runWorkflowAction]
+  );
+
   const markReadyForPickup = useCallback(
     (id) => runWorkflowAction(() => DocumentService.markRequestReadyForPickup(id), 'Request marked ready for pickup.'),
     [runWorkflowAction]
@@ -144,6 +197,8 @@ export function useRequests() {
 
   // --- Declarative Filter and Sort Pipeline ---
   const processedRequests = useMemo(() => {
+    if (registrarDashboard) return requests;
+
     const searchLower = searchTerm.trim().toLowerCase();
 
     const filtered = requests.filter((req) => {
@@ -180,12 +235,26 @@ export function useRequests() {
         default: return 0;
       }
     });
-  }, [requests, searchTerm, statusFilter, sortOption, showFulfilledRequests, showRejectedRequests]);
+  }, [
+    registrarDashboard,
+    requests,
+    searchTerm,
+    statusFilter,
+    sortOption,
+    showFulfilledRequests,
+    showRejectedRequests,
+  ]);
 
   return {
     requests: processedRequests,
     allRequests: requests,
     rawCount: requests.length,
+    currentPage,
+    setCurrentPage,
+    requestsPerPage: pagination.pageSize,
+    totalPages: pagination.totalPages,
+    totalRequests: pagination.totalRequests,
+    statusCounts,
     isLoading,
     isFetching,
     error,
@@ -204,6 +273,7 @@ export function useRequests() {
     reviewAsRegistrar,
     changeRequestStatus,
     confirmPayment,
+    rejectPaymentProof,
     startRequestProcessing,
     updateRequestEta,
     requestEtaUpdate,

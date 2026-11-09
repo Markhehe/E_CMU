@@ -1,21 +1,190 @@
-.guide-page h1 {
-  text-align: center;
-  font-size: 1.6rem;
-  margin-bottom: 2rem;
+.guide-page {
+  max-width: 62rem;
+  margin: 0 auto;
+  color: var(--text-dark);
+  line-height: 1.65;
 }
 
-.guide-columns {
-  display: flex;
-  gap: 4rem;
+.guide-header {
+  margin-bottom: 1.75rem;
+  padding: 1.75rem;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, var(--imperial-blue), #15427c);
+  color: var(--surface-white);
 }
 
-.guide-columns ul {
-  list-style: disc;
-  padding-left: 1.2rem;
+.guide-eyebrow {
+  color: #ffd27b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.guide-header h2 {
+  margin: 0.35rem 0 0.4rem;
+  color: inherit;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+}
+
+.guide-header p {
+  max-width: 42rem;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.guide-section {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border-light);
+  border-radius: 1rem;
+  background: var(--surface-white);
+  box-shadow: 0 8px 24px rgba(2, 35, 96, 0.06);
+}
+
+.guide-section h3,
+.guide-in-person h3 {
+  margin: 0 0 1rem;
+  color: var(--imperial-blue);
+  font-size: 1.2rem;
+}
+
+.guide-section-intro {
+  margin: -0.5rem 0 1rem;
+  color: var(--text-muted);
+}
+
+.guide-steps {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: guide-step;
+}
+
+.guide-steps > li {
+  position: relative;
+  min-width: 0;
+  padding: 1rem 1rem 1rem 3.75rem;
+  border: 1px solid #e8edf4;
+  border-radius: 0.75rem;
+  background: #fff;
+  counter-increment: guide-step;
+}
+
+.guide-steps > li::before {
+  position: absolute;
+  top: 0.9rem;
+  left: 0.9rem;
+  display: grid;
+  width: 2.1rem;
+  height: 2.1rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--imperial-blue);
+  color: var(--surface-white);
+  content: counter(guide-step);
+  font-weight: 700;
+}
+
+.guide-steps > li:last-child {
+  background: #fbfcfe;
+}
+
+.guide-substeps {
+  display: grid;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: guide-substep;
+}
+
+.guide-substeps > li {
+  position: relative;
+  min-width: 0;
+  padding: 0.8rem 0.8rem 0.8rem 4.8rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  background: var(--surface-white);
+  counter-increment: guide-substep;
+}
+
+.guide-substeps > li::before {
+  position: absolute;
+  top: 0.8rem;
+  left: 0.8rem;
+  display: inline-flex;
+  width: 3.25rem;
+  min-height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #fff3dc;
+  color: var(--imperial-blue);
+  content: "6." counter(guide-substep);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.guide-document-list {
+  columns: 2;
+  column-gap: 2.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide-document-list li {
+  position: relative;
+  break-inside: avoid;
+  margin: 0 0 0.65rem;
+  padding-left: 1.25rem;
+  font-weight: 600;
+}
+
+.guide-document-list li::before {
+  position: absolute;
+  left: 0;
+  color: var(--honey-bronze);
+  content: "•";
+  font-size: 1.2rem;
+  line-height: 1.4;
+}
+
+.guide-in-person {
+  margin-top: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  border-left: 4px solid var(--honey-bronze);
+  border-radius: 0.25rem 0.85rem 0.85rem 0.25rem;
+  background: var(--parchment);
+}
+
+.guide-in-person h3 {
+  margin-bottom: 0.4rem;
+}
+
+.guide-in-person p {
   margin: 0;
 }
 
-.guide-columns li {
-  margin-bottom: 0.6rem;
-  font-weight: 600;
+@media (max-width: 600px) {
+  .guide-header,
+  .guide-section {
+    padding: 1.1rem;
+  }
+
+  .guide-document-list {
+    columns: 1;
+  }
+
+  .guide-substeps > li {
+    padding: 0.65rem 0.65rem 0.65rem 4.1rem;
+  }
+
+  .guide-substeps > li::before {
+    top: 0.65rem;
+    left: 0.65rem;
+    width: 2.8rem;
+  }
 }

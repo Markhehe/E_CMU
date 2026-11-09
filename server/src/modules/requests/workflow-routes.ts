@@ -12,13 +12,17 @@ import {
   requestStatusHistory,
   requests,
   notifications,
+  auditLogs,
   roles,
   userRoles,
 } from "../../db/schema.js";
 import { requireAuth } from "../../middleware/auth.js";
+import { canUpdateAssignedRequest } from "./request-ownership.js";
 import { imageDataUrlSchema, paymentProofImagesSchema } from "./validation.js";
+import { writeAuditLog } from "../../services/audit-log.js";
 import {
   scheduleEmailNotification,
+  sendPaymentProofRejectedEmail,
   sendPaymentReceivedEmail,
   sendReadyForPickupEmail,
   sendRequestCommentEmail,
@@ -276,6 +280,9 @@ const paymentSchema = z
     providerReference: z.string().trim().max(255).optional(),
     notes: z.string().trim().max(2000).optional(),
   });
+const paymentProofRejectionSchema = z.object({
+  reason: z.string().trim().min(3).max(240),
+});
 
 const paymentProofSchema = z.object({
   receiptDataUrl: imageDataUrlSchema,
@@ -394,7 +401,7 @@ router.patch(
         [requester.rows[0].requester_id],
       );
       const current = await client.query(
-        `SELECT id, requester_id, status
+        `SELECT id, requester_id, status, assigned_to
          FROM requests
          WHERE id = $1
          FOR UPDATE`,
@@ -406,6 +413,17 @@ router.patch(
       }
 
       const request = current.rows[0];
+      if (!canUpdateAssignedRequest(
+        request.assigned_to,
+        request.status,
+        req.user!.id,
+        isRegistrarAdmin(req),
+      )) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          error: "This request is assigned to another registrar staff member.",
+        });
+      }
       const nextStatus = parsedStatus.data.status;
       if (request.status === nextStatus) {
         await client.query("COMMIT");
@@ -436,13 +454,24 @@ router.patch(
         }
       }
 
+      const assignedTo =
+        ["fulfilled", "rejected", "overdue"].includes(nextStatus)
+          ? null
+          : request.status === "overdue" || request.assigned_to === null
+            ? req.user!.id
+            : request.assigned_to;
       await client.query(
         `UPDATE requests
          SET status = $1::public.request_status,
+             assigned_to = CASE
+               WHEN $1 IN ('fulfilled', 'rejected', 'overdue') THEN NULL
+               WHEN status = 'overdue' OR assigned_to IS NULL THEN $3
+               ELSE assigned_to
+             END,
              completed_at = CASE WHEN $1 = 'fulfilled' THEN NOW() ELSE NULL END,
              updated_at = NOW()
          WHERE id = $2`,
-        [nextStatus, parsedId.data.id],
+        [nextStatus, parsedId.data.id, req.user!.id],
       );
       await client.query(
         `INSERT INTO request_status_history
@@ -456,6 +485,22 @@ router.patch(
           `Status manually changed by Registrar from ${request.status} to ${nextStatus}`,
         ],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "request.status_changed",
+        entityType: "request",
+        entityId: parsedId.data.id,
+        metadata: { fromStatus: request.status, toStatus: nextStatus },
+      });
+      if (request.assigned_to !== assignedTo) {
+        await writeAuditLog(client, {
+          actorId: req.user!.id,
+          action: "request.assigned",
+          entityType: "request",
+          entityId: parsedId.data.id,
+          metadata: { assignedTo },
+        });
+      }
       await client.query(
         `INSERT INTO notifications
            (user_id, request_id, channel, type, title, message)
@@ -510,8 +555,9 @@ async function createReview(
   stage: "registrar",
   decision: "approved" | "rejected" | "needs_information",
   comment: string | undefined,
-  reviewerId: number,
+  req: WorkflowRequest,
 ) {
+  const reviewerId = req.user!.id;
   return db.transaction(async (tx) => {
     const [request] = await tx
       .select({
@@ -519,6 +565,7 @@ async function createReview(
         status: requests.status,
         requesterId: requests.requesterId,
         displayCode: requests.displayCode,
+        assignedTo: requests.assignedTo,
       })
       .from(requests)
       .where(eq(requests.id, requestId))
@@ -527,6 +574,17 @@ async function createReview(
 
     if (!request) {
       return { error: "Request not found", statusCode: 404 as const };
+    }
+    if (!canUpdateAssignedRequest(
+      request.assignedTo,
+      request.status,
+      reviewerId,
+      isRegistrarAdmin(req),
+    )) {
+      return {
+        error: "This request is assigned to another registrar staff member.",
+        statusCode: 403 as const,
+      };
     }
 
     const allowedStatuses: readonly string[] =
@@ -552,9 +610,18 @@ async function createReview(
       })
       .returning();
 
+    const assignedTo = ["fulfilled", "rejected"].includes(finalStatus)
+      ? null
+      : request.status === "overdue" || request.assignedTo === null
+        ? reviewerId
+        : request.assignedTo;
     await tx
       .update(requests)
-      .set({ status: finalStatus, updatedAt: new Date() })
+      .set({
+        status: finalStatus,
+        assignedTo,
+        updatedAt: new Date(),
+      })
       .where(eq(requests.id, requestId));
 
     await tx.insert(requestStatusHistory).values({
@@ -564,6 +631,27 @@ async function createReview(
       changedBy: reviewerId,
       comment: comment ?? `${stage} decision: ${decision}`,
     });
+    await tx.insert(auditLogs).values({
+      actorId: reviewerId,
+      action: "request.reviewed",
+      entityType: "request",
+      entityId: requestId,
+      metadata: {
+        stage,
+        decision,
+        fromStatus: request.status,
+        toStatus: finalStatus,
+      },
+    });
+    if (request.assignedTo !== assignedTo) {
+      await tx.insert(auditLogs).values({
+        actorId: reviewerId,
+        action: "request.assigned",
+        entityType: "request",
+        entityId: requestId,
+        metadata: { assignedTo },
+      });
+    }
 
     if (decision === "approved") {
       await tx.insert(notifications).values({
@@ -602,7 +690,7 @@ router.post(
         "registrar",
         input.decision,
         input.comment,
-        req.user!.id,
+        req,
       );
 
       if ("error" in result) {
@@ -661,13 +749,57 @@ router.delete(
 
     try {
       const result = await pool.query(
-        `DELETE FROM request_comments
-         WHERE request_id = $1
-           AND id = $2
-           AND author_id = $3`,
-        [parsedRequestId.data.id, parsedCommentId.data, req.user!.id],
+        `WITH locked_request AS MATERIALIZED (
+           SELECT id, assigned_to, status
+           FROM requests
+           WHERE id = $1
+           FOR UPDATE
+         ),
+         deleted_comment AS (
+           DELETE FROM request_comments AS comment_row
+           USING locked_request AS request_row
+           WHERE comment_row.request_id = request_row.id
+             AND request_row.id = $1
+             AND comment_row.id = $2
+             AND comment_row.author_id = $3
+             AND (
+               request_row.assigned_to IS NULL
+               OR request_row.assigned_to = $3
+               OR $4::boolean
+             )
+           RETURNING comment_row.request_id, comment_row.visibility
+         ),
+         inserted_audit AS (
+           INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+           SELECT $3, 'request.comment_deleted', 'request',
+                  deleted_comment.request_id::text,
+                  jsonb_build_object('visibility', deleted_comment.visibility)
+           FROM deleted_comment
+           RETURNING id
+         )
+         SELECT id FROM inserted_audit`,
+        [
+          parsedRequestId.data.id,
+          parsedCommentId.data,
+          req.user!.id,
+          isRegistrarAdmin(req),
+        ],
       );
       if (result.rowCount === 0) {
+        const request = await pool.query(
+          "SELECT assigned_to, status FROM requests WHERE id = $1",
+          [parsedRequestId.data.id],
+        );
+        if (request.rowCount > 0 && !canUpdateAssignedRequest(
+          request.rows[0].assigned_to,
+          request.rows[0].status,
+          req.user!.id,
+          isRegistrarAdmin(req),
+        )) {
+          return res.status(403).json({
+            error: "This request is assigned to another registrar staff member.",
+          });
+        }
         return res.status(404).json({ error: "Comment not found" });
       }
       return res.status(204).end();
@@ -695,11 +827,19 @@ router.post(
 
     try {
       const result = await pool.query(
-        `WITH inserted_comment AS (
+        `WITH locked_request AS MATERIALIZED (
+           SELECT id, requester_id, display_code, assigned_to, status
+           FROM requests
+           WHERE id = $1
+           FOR UPDATE
+         ),
+         inserted_comment AS (
            INSERT INTO request_comments (request_id, author_id, visibility, comment)
            SELECT request_row.id, $2, $3, $4
-           FROM requests AS request_row
-           WHERE request_row.id = $1
+           FROM locked_request AS request_row
+           WHERE request_row.assigned_to IS NULL
+              OR request_row.assigned_to = $2
+              OR $5::boolean
            RETURNING id, request_id, author_id, visibility, comment, created_at
          ),
          inserted_notification AS (
@@ -708,23 +848,47 @@ router.post(
            SELECT request_row.requester_id, request_row.id, inserted_comment.id, 'in_app',
                   'request_comment', 'New comment on your request',
                   'A registrar sent you a comment on request ' || request_row.display_code || '.'
-           FROM requests AS request_row
+           FROM locked_request AS request_row
            INNER JOIN inserted_comment ON inserted_comment.request_id = request_row.id
            WHERE inserted_comment.visibility = 'requester'
+           RETURNING id
+         ),
+         inserted_audit AS (
+           INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, metadata)
+           SELECT inserted_comment.author_id, 'request.comment_added', 'request',
+                  inserted_comment.request_id::text,
+                  jsonb_build_object('visibility', inserted_comment.visibility)
+           FROM inserted_comment
            RETURNING id
          )
          SELECT inserted_comment.id, inserted_comment.comment, inserted_comment.visibility,
                 inserted_comment.created_at, author.full_name AS author_name
          FROM inserted_comment
-         INNER JOIN users AS author ON author.id = inserted_comment.author_id`,
+         INNER JOIN users AS author ON author.id = inserted_comment.author_id
+         CROSS JOIN inserted_audit`,
         [
           parsedId.data.id,
           req.user!.id,
           parsedComment.data.visibility,
           parsedComment.data.comment,
+          isRegistrarAdmin(req),
         ],
       );
       if (result.rowCount === 0) {
+        const request = await pool.query(
+          "SELECT assigned_to, status FROM requests WHERE id = $1",
+          [parsedId.data.id],
+        );
+        if (request.rowCount > 0 && !canUpdateAssignedRequest(
+          request.rows[0].assigned_to,
+          request.rows[0].status,
+          req.user!.id,
+          isRegistrarAdmin(req),
+        )) {
+          return res.status(403).json({
+            error: "This request is assigned to another registrar staff member.",
+          });
+        }
         return res.status(404).json({ error: "Request not found" });
       }
 
@@ -829,12 +993,23 @@ router.post(
       const { id } = parsedId.data;
       await client.query("BEGIN");
       const current = await client.query(
-        "SELECT status, requester_id, display_code FROM requests WHERE id = $1 FOR UPDATE",
+        "SELECT status, requester_id, display_code, assigned_to FROM requests WHERE id = $1 FOR UPDATE",
         [id],
       );
       if (current.rowCount === 0) {
         await client.query("ROLLBACK");
         return res.status(404).json({ error: "Request not found" });
+      }
+      if (!canUpdateAssignedRequest(
+        current.rows[0].assigned_to,
+        current.rows[0].status,
+        req.user!.id,
+        isRegistrarAdmin(req),
+      )) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          error: "This request is assigned to another registrar staff member.",
+        });
       }
       if (current.rows[0].status !== "paid") {
         await client.query("ROLLBACK");
@@ -843,9 +1018,10 @@ router.post(
       await client.query(
         `UPDATE requests
          SET status = 'processing', eta_at = $2, eta_update_requested_at = NULL,
+             assigned_to = COALESCE(assigned_to, $3),
              updated_at = NOW()
          WHERE id = $1`,
-        [id, parsedEta.data.etaAt],
+        [id, parsedEta.data.etaAt, req.user!.id],
       );
       await client.query(
         `INSERT INTO request_status_history
@@ -853,6 +1029,22 @@ router.post(
          VALUES ($1, 'paid', 'processing', $2, 'Document processing started')`,
         [id, req.user!.id],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "request.status_changed",
+        entityType: "request",
+        entityId: id,
+        metadata: { fromStatus: "paid", toStatus: "processing" },
+      });
+      if (current.rows[0].assigned_to === null) {
+        await writeAuditLog(client, {
+          actorId: req.user!.id,
+          action: "request.assigned",
+          entityType: "request",
+          entityId: id,
+          metadata: { assignedTo: req.user!.id },
+        });
+      }
       await client.query(
         `INSERT INTO notifications
            (user_id, request_id, channel, type, title, message)
@@ -880,7 +1072,7 @@ router.post(
 router.put(
   "/:id/eta",
   requireAuth,
-  requireRole("registrar"),
+  requireRole(...staffRoles),
   async (req: WorkflowRequest, res: Response, next: NextFunction) => {
     const parsedId = requestIdSchema.safeParse(req.params);
     const parsedEta = requestEtaSchema.safeParse(req.body);
@@ -897,7 +1089,7 @@ router.put(
     try {
       await client.query("BEGIN");
       const current = await client.query(
-        `SELECT status, requester_id, display_code
+        `SELECT status, requester_id, display_code, assigned_to
          FROM requests
          WHERE id = $1
          FOR UPDATE`,
@@ -909,6 +1101,17 @@ router.put(
       }
 
       const request = current.rows[0];
+      if (!canUpdateAssignedRequest(
+        request.assigned_to,
+        request.status,
+        req.user!.id,
+        isRegistrarAdmin(req),
+      )) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          error: "This request is assigned to another registrar staff member.",
+        });
+      }
       if (!["processing", "overdue"].includes(request.status)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -919,9 +1122,13 @@ router.put(
       await client.query(
         `UPDATE requests
          SET status = 'processing', eta_at = $2, eta_update_requested_at = NULL,
+             assigned_to = CASE
+               WHEN status = 'overdue' OR assigned_to IS NULL THEN $3
+               ELSE assigned_to
+             END,
              updated_at = NOW()
          WHERE id = $1`,
-        [parsedId.data.id, parsedEta.data.etaAt],
+        [parsedId.data.id, parsedEta.data.etaAt, req.user!.id],
       );
       await client.query(
         `INSERT INTO request_status_history
@@ -929,6 +1136,22 @@ router.put(
          VALUES ($1, $2, 'processing', $3, 'Estimated availability time updated')`,
         [parsedId.data.id, request.status, req.user!.id],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "request.status_changed",
+        entityType: "request",
+        entityId: parsedId.data.id,
+        metadata: { fromStatus: request.status, toStatus: "processing" },
+      });
+      if (request.status === "overdue" || request.assigned_to === null) {
+        await writeAuditLog(client, {
+          actorId: req.user!.id,
+          action: "request.assigned",
+          entityType: "request",
+          entityId: parsedId.data.id,
+          metadata: { assignedTo: req.user!.id },
+        });
+      }
       await client.query(
         `INSERT INTO notifications
            (user_id, request_id, channel, type, title, message)
@@ -1020,7 +1243,7 @@ router.post(
       await client.query("BEGIN");
       const current = await client.query(
         `SELECT request.status, request.id, request.requester_id,
-                request.display_code, account.email,
+                request.display_code, request.assigned_to, account.email,
                 account.full_name, document.name AS document_name
          FROM requests AS request
          INNER JOIN users AS account ON account.id = request.requester_id
@@ -1035,6 +1258,17 @@ router.post(
       }
 
       const request = current.rows[0];
+      if (!canUpdateAssignedRequest(
+        request.assigned_to,
+        request.status,
+        req.user!.id,
+        isRegistrarAdmin(req),
+      )) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          error: "This request is assigned to another registrar staff member.",
+        });
+      }
       if (!["paid", "processing", "overdue", "ready_for_pickup"].includes(request.status)) {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -1045,9 +1279,14 @@ router.post(
       if (["paid", "processing", "overdue"].includes(request.status)) {
         await client.query(
           `UPDATE requests
-           SET status = 'ready_for_pickup', updated_at = NOW()
+           SET status = 'ready_for_pickup',
+               assigned_to = CASE
+                 WHEN status = 'overdue' OR assigned_to IS NULL THEN $2
+                 ELSE assigned_to
+               END,
+               updated_at = NOW()
            WHERE id = $1`,
-          [id],
+          [id, req.user!.id],
         );
         await client.query(
           `INSERT INTO request_status_history
@@ -1062,6 +1301,34 @@ router.post(
                    'Your document request ' || $3 || ' is ready for pickup.')`,
           [request.requester_id, id, request.display_code],
         );
+        await writeAuditLog(client, {
+          actorId: req.user!.id,
+          action: "request.status_changed",
+          entityType: "request",
+          entityId: id,
+          metadata: { fromStatus: request.status, toStatus: "ready_for_pickup" },
+        });
+        if (request.status === "overdue" || request.assigned_to === null) {
+          await writeAuditLog(client, {
+            actorId: req.user!.id,
+            action: "request.assigned",
+            entityType: "request",
+            entityId: id,
+            metadata: { assignedTo: req.user!.id },
+          });
+        }
+      } else if (request.assigned_to === null) {
+        await client.query(
+          "UPDATE requests SET assigned_to = $2, updated_at = NOW() WHERE id = $1",
+          [id, req.user!.id],
+        );
+        await writeAuditLog(client, {
+          actorId: req.user!.id,
+          action: "request.assigned",
+          entityType: "request",
+          entityId: id,
+          metadata: { assignedTo: req.user!.id },
+        });
       }
       await client.query("COMMIT");
       requestForEmail = request;
@@ -1098,7 +1365,7 @@ router.post(
       const { id } = requestIdSchema.parse(req.params);
       await client.query("BEGIN");
       const current = await client.query(
-        "SELECT status FROM requests WHERE id = $1 FOR UPDATE",
+        "SELECT status, assigned_to FROM requests WHERE id = $1 FOR UPDATE",
         [id],
       );
       if (current.rowCount === 0) {
@@ -1106,6 +1373,17 @@ router.post(
         return res.status(404).json({ error: "Request not found" });
       }
       const previousStatus = current.rows[0].status as string;
+      if (!canUpdateAssignedRequest(
+        current.rows[0].assigned_to,
+        previousStatus,
+        req.user!.id,
+        isRegistrarAdmin(req),
+      )) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          error: "This request is assigned to another registrar staff member.",
+        });
+      }
       if (previousStatus !== "ready_for_pickup") {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -1115,7 +1393,8 @@ router.post(
 
       const result = await client.query(
         `UPDATE requests
-         SET status = 'fulfilled', completed_at = NOW(), updated_at = NOW()
+         SET status = 'fulfilled', assigned_to = NULL,
+             completed_at = NOW(), updated_at = NOW()
          WHERE id = $1
          RETURNING id, status, completed_at`,
         [id],
@@ -1126,6 +1405,13 @@ router.post(
          VALUES ($1, $2, 'fulfilled', $3, 'Document picked up')`,
         [id, previousStatus, req.user!.id],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "request.status_changed",
+        entityType: "request",
+        entityId: id,
+        metadata: { fromStatus: previousStatus, toStatus: "fulfilled" },
+      });
       await client.query("COMMIT");
       return res.json({ request: result.rows[0] });
     } catch (error) {
@@ -1197,6 +1483,12 @@ router.post(
          RETURNING id, file_data, original_name, status, comment, submitted_at, reviewed_at`,
         [req.user!.id, parsed.data.fileData, parsed.data.originalName],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "clearance.submitted",
+        entityType: "clearance",
+        entityId: String(result.rows[0].id),
+      });
       await client.query(
         `INSERT INTO notifications (user_id, channel, type, title, message)
          SELECT assignment.user_id, 'in_app', 'registrar_clearance_submitted',
@@ -1603,7 +1895,7 @@ router.post(
       }
 
       const clearance = result.rows[0];
-      await client.query(
+      const requestStatusChanges = await client.query(
         `WITH affected_requests AS MATERIALIZED (
            SELECT id, status AS previous_status
            FROM requests
@@ -1623,9 +1915,19 @@ router.post(
                 'clearance_review', $2, 'Clearance invalidated'
          FROM updated_requests
          INNER JOIN affected_requests
-           ON affected_requests.id = updated_requests.id`,
+           ON affected_requests.id = updated_requests.id
+         RETURNING request_id, from_status, to_status`,
         [clearance.user_id, req.user!.id],
       );
+      for (const change of requestStatusChanges.rows) {
+        await writeAuditLog(client, {
+          actorId: req.user!.id,
+          action: "request.status_changed",
+          entityType: "request",
+          entityId: change.request_id,
+          metadata: { fromStatus: change.from_status, toStatus: change.to_status },
+        });
+      }
       await client.query(
         `INSERT INTO notifications (user_id, channel, type, title, message)
          VALUES (
@@ -1636,6 +1938,13 @@ router.post(
          )`,
         [clearance.user_id, clearance.comment],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "clearance.invalidated",
+        entityType: "clearance",
+        entityId: String(clearance.id),
+        metadata: { status: "needs_update" },
+      });
       await client.query("COMMIT");
       return res.json({ clearance: result.rows[0] });
     } catch (error) {
@@ -1690,7 +1999,7 @@ router.post(
 
       const clearance = result.rows[0];
       if (clearance.status === "verified") {
-        await client.query(
+        const requestStatusChanges = await client.query(
           `WITH requests_to_restore AS MATERIALIZED (
               SELECT request_row.id, request_row.status AS previous_status,
                      CASE COALESCE(previous_history.from_status, 'pending_review')
@@ -1725,9 +2034,19 @@ router.post(
                   'Clearance verified; restored previous request status'
            FROM updated_requests
            INNER JOIN requests_to_restore
-             ON requests_to_restore.id = updated_requests.id`,
+             ON requests_to_restore.id = updated_requests.id
+           RETURNING request_id, from_status, to_status`,
           [clearance.user_id, req.user!.id],
         );
+        for (const change of requestStatusChanges.rows) {
+          await writeAuditLog(client, {
+            actorId: req.user!.id,
+            action: "request.status_changed",
+            entityType: "request",
+            entityId: change.request_id,
+            metadata: { fromStatus: change.from_status, toStatus: change.to_status },
+          });
+        }
       }
       await client.query(
         `INSERT INTO notifications (user_id, channel, type, title, message)
@@ -1750,6 +2069,13 @@ router.post(
          )`,
         [clearance.user_id, clearance.status, clearance.comment],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "clearance.reviewed",
+        entityType: "clearance",
+        entityId: String(clearance.id),
+        metadata: { decision: clearance.status },
+      });
       await client.query("COMMIT");
       return res.json({ clearance: result.rows[0] });
     } catch (error) {
@@ -1856,6 +2182,17 @@ router.post(
          VALUES ($1, NULL, 'pending_review', $2, 'Walk-in request entered by Registrar')`,
         [request.id, req.user!.id],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "request.created",
+        entityType: "request",
+        entityId: request.id,
+        metadata: {
+          displayCode: request.display_code,
+          source: "walk_in",
+          toStatus: request.status,
+        },
+      });
       await client.query("COMMIT");
       return res.status(201).json({ request });
     } catch (error) {
@@ -1912,6 +2249,13 @@ router.post(
          WHERE id = $2`,
         [JSON.stringify({ paymentMethod: input.paymentMethod }), id],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "request.payment_method_changed",
+        entityType: "request",
+        entityId: id,
+        metadata: { paymentMethod: input.paymentMethod },
+      });
 
       await client.query("COMMIT");
       res.json({ paymentMethod: input.paymentMethod });
@@ -1986,7 +2330,15 @@ router.post(
       await client.query(
         `UPDATE requests
          SET status = $1,
-             additional_details = COALESCE(additional_details, '{}'::jsonb) || $2::jsonb,
+             additional_details = (
+               COALESCE(additional_details, '{}'::jsonb)
+               - ARRAY[
+                   'paymentProofRejectedReason',
+                   'payment_proof_rejected_reason',
+                   'hasReceipt',
+                   'has_receipt'
+                 ]::text[]
+             ) || $2::jsonb,
              updated_at = NOW()
          WHERE id = $3`,
         [
@@ -2002,14 +2354,18 @@ router.post(
         ],
       );
 
-      if (request.status !== nextStatus) {
-        await client.query(
-          `INSERT INTO request_status_history
-             (request_id, from_status, to_status, changed_by, comment)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [id, request.status, nextStatus, req.user!.id, "Student submitted cash payment receipt and request copy"],
-        );
-      }
+      await client.query(
+        `INSERT INTO request_status_history
+           (request_id, from_status, to_status, changed_by, comment)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [id, request.status, nextStatus, req.user!.id, "Student submitted cash payment receipt and request copy"],
+      );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "payment_proof.submitted",
+        entityType: "request",
+        entityId: id,
+      });
 
       await client.query(
         `INSERT INTO notifications (user_id, request_id, channel, type, title, message)
@@ -2042,6 +2398,131 @@ router.post(
 );
 
 router.post(
+  "/:id/payment-proof/reject",
+  requireAuth,
+  requireRole(...staffRoles),
+  async (req: WorkflowRequest, res: Response, next: NextFunction) => {
+    const parsedInput = paymentProofRejectionSchema.safeParse(req.body);
+    if (!parsedInput.success) {
+      return res.status(400).json({
+        error: "Provide a rejection reason between 3 and 240 characters",
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      const { id } = requestIdSchema.parse(req.params);
+      await client.query("BEGIN");
+      const result = await client.query(
+        `SELECT request_row.id, request_row.requester_id, request_row.display_code,
+                request_row.status, request_row.assigned_to, request_row.additional_details,
+                requester.email AS requester_email, requester.full_name AS requester_name,
+                document_type.name AS document_name
+         FROM requests AS request_row
+         INNER JOIN users AS requester ON requester.id = request_row.requester_id
+         INNER JOIN document_types AS document_type
+           ON document_type.id = request_row.document_type_id
+         WHERE request_row.id = $1
+         FOR UPDATE`,
+        [id],
+      );
+      if (result.rowCount === 0) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Request not found" });
+      }
+
+      const request = result.rows[0];
+      if (!canUpdateAssignedRequest(
+        request.assigned_to,
+        request.status,
+        req.user!.id,
+        isRegistrarAdmin(req),
+      )) {
+        await client.query("ROLLBACK");
+        return res.status(403).json({
+          error: "This request is assigned to another registrar staff member.",
+        });
+      }
+      if (request.status !== "pending_payment") {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          error: `Payment proof cannot be rejected while request status is ${request.status}`,
+        });
+      }
+
+      const details = request.additional_details ?? {};
+      if (!details.receiptUrl && !details.receipt_url && !details.proof_of_payment) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "No uploaded payment proof is available to reject" });
+      }
+
+      const reason = parsedInput.data.reason;
+      await client.query(
+        `UPDATE requests
+         SET additional_details = (
+               COALESCE(additional_details, '{}'::jsonb)
+               - ARRAY[
+                   'receiptUrl', 'receipt_url', 'proof_of_payment',
+                   'requestCopyUrl', 'request_copy_url',
+                   'requestCopyDataUrl', 'request_copy_data_url',
+                   'orNumber', 'or_number', 'paymentReference', 'payment_reference',
+                   'paymentSentAt', 'payment_sent_at', 'hasReceipt', 'has_receipt'
+                 ]::text[]
+             ) || $1::jsonb,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [JSON.stringify({ paymentProofRejectedReason: reason }), id],
+      );
+      await client.query(
+        `INSERT INTO request_status_history
+           (request_id, from_status, to_status, changed_by, comment)
+         VALUES ($1, $2, $2, $3, $4)`,
+        [id, request.status, req.user!.id, `Payment proof rejected: ${reason}`],
+      );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "payment_proof.rejected",
+        entityType: "request",
+        entityId: id,
+      });
+      await client.query(
+        `INSERT INTO notifications (user_id, request_id, channel, type, title, message)
+         VALUES ($1, $2, 'in_app', 'payment_proof_rejected',
+                 'Payment proof needs to be resubmitted',
+                 'Your payment proof for request ' || $3 || ' was rejected. Reason: ' || $4 ||
+                 ' Please upload a corrected receipt and request copy from your dashboard.')`,
+        [request.requester_id, id, request.display_code, reason],
+      );
+
+      await client.query("COMMIT");
+      scheduleEmailNotification("payment-proof-rejected", () =>
+        sendPaymentProofRejectedEmail({
+          email: request.requester_email,
+          fullName: request.requester_name,
+          documentName: request.document_name,
+          requestCode: request.display_code,
+          reason,
+        }),
+      );
+      return res.json({
+        status: request.status,
+        paymentProofRejectedReason: reason,
+        message: "Payment proof rejected. The student can upload corrected documents.",
+      });
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("Failed to roll back payment proof rejection:", rollbackError);
+      }
+      return next(error);
+    } finally {
+      client.release();
+    }
+  },
+);
+
+router.post(
   "/:id/payments",
   requireAuth,
   requireRole(...staffRoles),
@@ -2054,7 +2535,8 @@ router.post(
       const result = await client.query(
         `SELECT request_row.id, request_row.requester_id, request_row.status, request_row.fee_amount,
                 request_row.fee_currency, request_row.display_code,
-                request_row.additional_details, requester.full_name AS requester_name,
+                request_row.additional_details, request_row.assigned_to,
+                requester.full_name AS requester_name,
                 requester.email AS requester_email, document_type.name AS document_name
          FROM requests AS request_row
          INNER JOIN users AS requester ON requester.id = request_row.requester_id
@@ -2072,6 +2554,18 @@ router.post(
       }
 
       const request = result.rows[0];
+      if (!canUpdateAssignedRequest(
+        request.assigned_to,
+        request.status,
+        req.user!.id,
+        isRegistrarAdmin(req),
+      )) {
+        await client.query("ROLLBACK");
+        res.status(403).json({
+          error: "This request is assigned to another registrar staff member.",
+        });
+        return;
+      }
       if (request.status !== "pending_payment") {
         await client.query("ROLLBACK");
         res.status(409).json({
@@ -2163,6 +2657,7 @@ router.post(
       await client.query(
         `UPDATE requests
          SET status = $1,
+             assigned_to = COALESCE(assigned_to, $4),
              additional_details = CASE
                WHEN $3::jsonb IS NULL THEN additional_details
                ELSE COALESCE(additional_details, '{}'::jsonb) || $3::jsonb
@@ -2175,6 +2670,7 @@ router.post(
           emailNotification
             ? JSON.stringify({ paymentConfirmationEmail: emailNotification })
             : null,
+          req.user!.id,
         ],
       );
       await client.query(
@@ -2189,6 +2685,13 @@ router.post(
           input.notes ?? `Registrar cash payment status: ${input.status}`,
         ],
       );
+      await writeAuditLog(client, {
+        actorId: req.user!.id,
+        action: "payment.recorded",
+        entityType: "request",
+        entityId: id,
+        metadata: { status: input.status, amount: input.amount, currency: input.currency },
+      });
       if (input.status === "succeeded") {
         await client.query(
           `INSERT INTO notifications (user_id, request_id, channel, type, title, message)

@@ -57,29 +57,11 @@ function RegistrarStaffManagement() {
         item.id === account.id ? updatedStaff : item
       )));
       addToast(
-        active ? 'Registrar staff account enabled.' : 'Registrar staff account disabled indefinitely.',
+        active ? 'Registrar staff account restored.' : 'Registrar staff account suspended.',
         'success',
       );
     } catch (error) {
       addToast(error.message || 'Failed to update registrar staff account.', 'error');
-    } finally {
-      setBusyStaffId(null);
-    }
-  };
-
-  const removeStaffAccount = async (account) => {
-    const confirmed = window.confirm(
-      `Remove ${account.full_name} from registrar staff? Their account will be disabled and staff access revoked. Historical records will be retained.`,
-    );
-    if (!confirmed) return;
-
-    setBusyStaffId(account.id);
-    try {
-      await RegistrarStaffService.remove(account.id);
-      setStaff((current) => current.filter((item) => item.id !== account.id));
-      addToast('Registrar staff account removed. Historical records were retained.', 'success');
-    } catch (error) {
-      addToast(error.message || 'Failed to remove registrar staff account.', 'error');
     } finally {
       setBusyStaffId(null);
     }
@@ -90,7 +72,7 @@ function RegistrarStaffManagement() {
       <header className="dashboard-header">
         <h1 className="dashboard-title">Registrar Staff</h1>
         <p className="dashboard-subtext">
-          Create staff accounts, disable access indefinitely, or remove staff access while retaining audit history.
+          Create staff accounts and suspend or restore their access.
         </p>
       </header>
 
@@ -173,7 +155,7 @@ function RegistrarStaffManagement() {
                   <td>{account.email}</td>
                   <td>
                     <span className={`registrar-staff-status${account.active ? ' is-active' : ' is-disabled'}`}>
-                      {account.active ? 'Active' : 'Disabled'}
+                      {account.active ? 'Active' : 'Suspended'}
                     </span>
                   </td>
                   <td>{new Date(account.created_at).toLocaleDateString()}</td>
@@ -184,15 +166,7 @@ function RegistrarStaffManagement() {
                       onClick={() => setStaffActive(account, !account.active)}
                       disabled={busyStaffId === account.id}
                     >
-                      {account.active ? 'Disable indefinitely' : 'Enable'}
-                    </button>
-                    <button
-                      type="button"
-                      className="workflow-step-button workflow-action-button-danger text-danger"
-                      onClick={() => removeStaffAccount(account)}
-                      disabled={busyStaffId === account.id}
-                    >
-                      Remove
+                      {account.active ? 'Suspend account' : 'Restore account'}
                     </button>
                   </td>
                 </tr>

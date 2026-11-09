@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import Modal from '../../../components/ui/Modal';
 
-export default function DiscardRequestModal({ isOpen, onClose, request, onSubmit }) {
+export default function RejectRequestModal({ isOpen, onClose, request, onSubmit }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleDiscard = async () => {
+  const handleReject = async () => {
     if (!request || isSubmitting) return;
     
     setIsSubmitting(true);
@@ -17,11 +17,11 @@ export default function DiscardRequestModal({ isOpen, onClose, request, onSubmit
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={() => { if (!isSubmitting) onClose(); }} title="Discard Request?">
+    <Modal isOpen={isOpen} onClose={() => { if (!isSubmitting) onClose(); }} title="Reject Request?">
       {request && (
         <>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-            Are you sure you want to discard request{' '}
+            Are you sure you want to reject request{' '}
             <strong>{request.displayId || request.id}</strong>? The request will be marked as rejected.
           </p>
           <div className="modal-actions">
@@ -37,10 +37,10 @@ export default function DiscardRequestModal({ isOpen, onClose, request, onSubmit
               type="button"
               className="btn-primary"
               disabled={isSubmitting}
-              onClick={handleDiscard}
+              onClick={handleReject}
               style={{ backgroundColor: 'var(--danger, #b42318)' }}
             >
-              {isSubmitting ? 'Discarding...' : 'Discard Request'}
+              {isSubmitting ? 'Rejecting...' : 'Reject Request'}
             </button>
           </div>
         </>

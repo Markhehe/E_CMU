@@ -8,6 +8,13 @@
       "when": 1793584127590,
       "tag": "0000_baseline_current_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794177465908,
+      "tag": "0001_student_login_verification",
+      "breakpoints": true
     }
   ]
 }

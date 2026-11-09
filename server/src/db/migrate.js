@@ -75,7 +75,6 @@ async function validateExistingDrizzleHistory(
     const hasCurrentBaseline = result.rows.some(({ hash }) => hash === baseline?.hash);
     const canAdoptLegacyBaseline =
         allowLegacyBaselineAdoption &&
-        migrations.length === 1 &&
         baseline &&
         (
             (result.rows.length === 1 &&

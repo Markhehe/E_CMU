@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { AuthService } from '../../services/api';
 import Modal from '../../components/ui/Modal';
+import Guide from '../Guide';
 import cmuLogo from '../../assets/cmulogo.png';
 import '../../styles/global.css';
 import './login.css';
@@ -106,6 +107,9 @@ function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginVerificationRequired, setLoginVerificationRequired] = useState(false);
+  const [loginVerificationCode, setLoginVerificationCode] = useState('');
+  const [isVerifyingLogin, setIsVerifyingLogin] = useState(false);
   const [resetStep, setResetStep] = useState('login');
   const [resetEmail, setResetEmail] = useState('');
   const [resetCode, setResetCode] = useState('');
@@ -115,6 +119,7 @@ function Login() {
   const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showGuideModal, setShowGuideModal] = useState(false);
 
   const { login } = useAuth();
   const { addToast } = useToast();
@@ -124,6 +129,12 @@ function Login() {
     setIsLoggingIn(true);
     try {
       const result = await AuthService.login(email, password);
+      if (result.verificationRequired) {
+        setLoginVerificationRequired(true);
+        setLoginVerificationCode('');
+        addToast(result.message, 'info');
+        return;
+      }
       login(result.user);
       addToast('Signed in successfully.', 'success');
     } catch (error) {
@@ -131,6 +142,40 @@ function Login() {
     } finally {
       setIsLoggingIn(false);
     }
+  };
+
+  const handleVerifyStudentLogin = async (event) => {
+    event.preventDefault();
+    setIsVerifyingLogin(true);
+    try {
+      const result = await AuthService.verifyStudentLoginCode(email, loginVerificationCode);
+      login(result.user);
+      setLoginVerificationRequired(false);
+      setLoginVerificationCode('');
+      addToast('Signed in successfully.', 'success');
+    } catch (error) {
+      addToast(error.message || 'Could not verify the sign-in code.', 'error');
+    } finally {
+      setIsVerifyingLogin(false);
+    }
+  };
+
+  const handleResendStudentLoginCode = async () => {
+    setIsVerifyingLogin(true);
+    try {
+      const result = await AuthService.resendStudentLoginCode(email, password);
+      setLoginVerificationCode('');
+      addToast(result.message || 'A new sign-in code has been sent.', 'success');
+    } catch (error) {
+      addToast(error.message || 'Could not resend the sign-in code.', 'error');
+    } finally {
+      setIsVerifyingLogin(false);
+    }
+  };
+
+  const handleReturnToLoginCredentials = () => {
+    setLoginVerificationRequired(false);
+    setLoginVerificationCode('');
   };
 
   const handleRequestPasswordReset = async (event) => {
@@ -228,7 +273,7 @@ function Login() {
             </h1>
             <h2>
               {resetStep === 'login'
-                ? 'Sign in'
+                ? loginVerificationRequired ? 'Verify student sign-in' : 'Sign in'
                 : resetStep === 'request'
                   ? 'Forgot password'
                   : resetStep === 'verify'
@@ -237,7 +282,9 @@ function Login() {
             </h2>
             <p className="login-subtext">
               {resetStep === 'login'
-                ? <>or{' '}
+                ? loginVerificationRequired
+                  ? `Enter the six-digit sign-in code sent to ${email}.`
+                  : <>or{' '}
                     <button
                       type="button"
                       className="gold-link text-button"
@@ -254,7 +301,10 @@ function Login() {
             </p>
 
             {resetStep === 'login' ? (
-              <form onSubmit={handleLoginSubmit} className="auth-form">
+              <form
+                onSubmit={loginVerificationRequired ? handleVerifyStudentLogin : handleLoginSubmit}
+                className="auth-form"
+              >
                 <div className="form-field-group">
                   <label htmlFor="email" className="auth-label">University Email</label>
                   <input
@@ -266,51 +316,107 @@ function Login() {
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"
                     required
-                    disabled={isLoggingIn}
+                    disabled={isLoggingIn || loginVerificationRequired}
                   />
                 </div>
 
-                <div className="form-field-group">
-                  <label htmlFor="password" className="auth-label">Password</label>
-                  <div className="password-input-wrapper">
+                {loginVerificationRequired ? (
+                  <div className="form-field-group">
+                    <label htmlFor="studentLoginCode" className="auth-label">Six-digit sign-in code</label>
                     <input
-                      id="password"
-                      type={showPassword ? 'text' : 'password'}
-                      className="auth-input"
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      autoComplete="current-password"
+                      id="studentLoginCode"
+                      type="text"
+                      className="auth-input verification-code-input"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      placeholder="123456"
+                      value={loginVerificationCode}
+                      onChange={(event) => setLoginVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
                       required
-                      disabled={isLoggingIn}
+                      disabled={isVerifyingLogin}
                     />
-                    <button
-                      type="button"
-                      className="password-toggle-btn"
-                      onClick={() => setShowPassword((prev) => !prev)}
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                    </button>
                   </div>
-                </div>
+                ) : (
+                  <div className="form-field-group">
+                    <label htmlFor="password" className="auth-label">Password</label>
+                    <div className="password-input-wrapper">
+                      <input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        className="auth-input"
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        autoComplete="current-password"
+                        required
+                        disabled={isLoggingIn}
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle-btn"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-                <button type="submit" className="auth-button" disabled={isLoggingIn}>
-                  {isLoggingIn ? 'SIGNING IN...' : 'SIGN IN'}
+                <button
+                  type="submit"
+                  className="auth-button"
+                  disabled={loginVerificationRequired
+                    ? isVerifyingLogin || loginVerificationCode.length !== 6
+                    : isLoggingIn}
+                >
+                  {loginVerificationRequired
+                    ? isVerifyingLogin ? 'VERIFYING...' : 'VERIFY AND SIGN IN'
+                    : isLoggingIn ? 'SIGNING IN...' : 'SIGN IN'}
                 </button>
 
-                <div className="auth-footer-actions">
-                  <button
-                    type="button"
-                    className="forgot-link text-button"
-                    onClick={() => {
-                      setResetEmail(email);
-                      setResetStep('request');
-                    }}
-                  >
-                    Forgotten your password?
-                  </button>
-                </div>
+                {loginVerificationRequired ? (
+                  <>
+                    <button
+                      type="button"
+                      className="forgot-link text-button"
+                      onClick={handleResendStudentLoginCode}
+                      disabled={isVerifyingLogin}
+                    >
+                      {isVerifyingLogin ? 'SENDING...' : 'Resend code'}
+                    </button>
+                    <button
+                      type="button"
+                      className="forgot-link text-button"
+                      onClick={handleReturnToLoginCredentials}
+                      disabled={isVerifyingLogin}
+                    >
+                      Back to sign in
+                    </button>
+                  </>
+                ) : (
+                  <div className="auth-footer-actions">
+                    <button
+                      type="button"
+                      className="forgot-link text-button"
+                      onClick={() => {
+                        setResetEmail(email);
+                        setResetStep('request');
+                      }}
+                    >
+                      Forgotten your password?
+                    </button>
+                    <button
+                      type="button"
+                      className="forgot-link text-button"
+                      onClick={() => setShowGuideModal(true)}
+                    >
+                      Student guide
+                    </button>
+                  </div>
+                )}
               </form>
             ) : resetStep === 'request' ? (
               <form onSubmit={handleRequestPasswordReset} className="auth-form">
@@ -419,6 +525,17 @@ function Login() {
         onClose={() => setShowRegisterModal(false)}
       />
 
+      <Modal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        title="Student Guide"
+        maxWidth="900px"
+      >
+        <div className="login-guide-modal-content">
+          <Guide />
+        </div>
+      </Modal>
+
     </main>
   );
 }
@@ -434,6 +551,8 @@ function RegistrationModal({ isOpen, onClose }) {
   });
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [registrationStep, setRegistrationStep] = useState('details');
+  const [registrationCode, setRegistrationCode] = useState('');
   const [hasAgreedToTerms, setHasAgreedToTerms] = useState(false);
   const [hasAgreedToDataProtection, setHasAgreedToDataProtection] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState(null);
@@ -461,10 +580,44 @@ function RegistrationModal({ isOpen, onClose }) {
         email: regData.email,
         password: regData.password,
       });
-      addToast(result.message || 'Account created. You can now sign in.', 'success');
+      setRegistrationStep('verify');
+      setRegistrationCode('');
+      addToast(result.message || 'Enter the verification code sent to your university email.', 'success');
+    } catch (error) {
+      if (error.status === 429) {
+        setRegistrationStep('verify');
+        setRegistrationCode('');
+        addToast(error.message || 'A verification code was recently sent. Check your email.', 'info');
+      } else {
+        addToast(error.message || 'Account creation failed.', 'error');
+      }
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const handleVerifyRegistrationCode = async (event) => {
+    event.preventDefault();
+    setIsRegistering(true);
+    try {
+      const result = await AuthService.verifyRegistrationCode(regData.email, registrationCode);
+      addToast(result.message || 'Email verified. You can now sign in.', 'success');
       handleModalClose();
     } catch (error) {
-      addToast(error.message || 'Account creation failed.', 'error');
+      addToast(error.message || 'Could not verify the registration code.', 'error');
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const handleResendRegistrationCode = async () => {
+    setIsRegistering(true);
+    try {
+      const result = await AuthService.resendRegistrationCode(regData.email);
+      setRegistrationCode('');
+      addToast(result.message || 'A new verification code has been sent.', 'success');
+    } catch (error) {
+      addToast(error.message || 'Could not resend the verification code.', 'error');
     } finally {
       setIsRegistering(false);
     }
@@ -480,15 +633,66 @@ function RegistrationModal({ isOpen, onClose }) {
     setHasAgreedToTerms(false);
     setHasAgreedToDataProtection(false);
     setSelectedPolicy(null);
+    setRegistrationStep('details');
+    setRegistrationCode('');
     onClose();
   };
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={handleModalClose} title="Create an account" maxWidth="450px">
+      <Modal
+        isOpen={isOpen}
+        onClose={handleModalClose}
+        title={registrationStep === 'verify' ? 'Verify your university email' : 'Create an account'}
+        maxWidth="450px"
+      >
+        {registrationStep === 'verify' ? (
+          <form onSubmit={handleVerifyRegistrationCode} className="auth-form">
+            <p className="auth-hint">
+              Enter the six-digit verification code sent to <strong>{regData.email}</strong>.
+              The code expires after 10 minutes.
+            </p>
+            <div className="form-field-group">
+              <label htmlFor="registrationCode" className="auth-label">Six-digit verification code</label>
+              <input
+                id="registrationCode"
+                type="text"
+                className="auth-input verification-code-input"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                placeholder="123456"
+                value={registrationCode}
+                onChange={(event) => setRegistrationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                required
+                disabled={isRegistering}
+              />
+            </div>
+            <button type="submit" className="auth-button" disabled={isRegistering || registrationCode.length !== 6}>
+              {isRegistering ? 'VERIFYING...' : 'VERIFY EMAIL'}
+            </button>
+            <button
+              type="button"
+              className="forgot-link text-button"
+              onClick={handleResendRegistrationCode}
+              disabled={isRegistering}
+            >
+              {isRegistering ? 'SENDING...' : 'Resend code'}
+            </button>
+            <button
+              type="button"
+              className="forgot-link text-button"
+              onClick={() => setRegistrationStep('details')}
+              disabled={isRegistering}
+            >
+              Back to registration details
+            </button>
+          </form>
+        ) : (
         <form onSubmit={handleRegisterSubmit} className="auth-form">
           <p className="registration-disclaimer" role="note">
-            Account registration is currently unavailable except for the email addresses included in the registration test.
+            Student accounts are activated after you verify the code sent to your university email.
           </p>
 
             <div className="form-field-group">
@@ -603,6 +807,7 @@ function RegistrationModal({ isOpen, onClose }) {
               {isRegistering ? 'CREATING...' : 'CREATE ACCOUNT'}
             </button>
         </form>
+        )}
       </Modal>
 
       <Modal

@@ -35,6 +35,11 @@
   outline-offset: 2px;
 }
 
+.workflow-inline-actions .workflow-step-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .registrar-dashboard-header {
   display: flex;
   flex-wrap: wrap;
@@ -682,6 +687,16 @@
   letter-spacing: 0.5px;
 }
 
+.payment-proof-rejection-alert {
+  max-width: 22rem;
+  color: #9b1c1c;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  text-transform: none;
+}
+
 .student-clearance-feedback {
   font-size: 1.1rem;
   line-height: 1.5;
@@ -759,21 +774,26 @@
    5. BUTTONS & ACTIONS (OVERLAP FIX)
    ========================================= */
 .btn-primary {
-  padding: 0.55rem 1.1rem;
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0.5rem 0.85rem;
   background-color: var(--imperial-blue);
   color: #fff;
   border: none;
-  border-radius: 6px;
-  font-size: 0.88rem;
-  font-weight: 500;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(2, 35, 96, 0.15);
-  transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .btn-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(2, 35, 96, 0.25);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(2, 35, 96, 0.14);
 }
 
 .btn-primary:disabled {
@@ -783,15 +803,20 @@
 }
 
 .btn-secondary {
-  padding: 0.55rem 1.1rem;
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0.5rem 0.85rem;
   background-color: transparent;
   border: 1px solid var(--border-light);
   color: #495057;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 0.88rem;
-  font-weight: 500;
-  transition: background-color 0.2s;
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -819,26 +844,29 @@
 
 .workflow-step-button {
   position: relative;
-  padding: 0.35rem 0.55rem;
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0.5rem 0.85rem;
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   background: var(--surface-white);
   color: var(--imperial-blue);
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
   white-space: nowrap;
   cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .workflow-step-button.workflow-action-button {
   flex: 0 0 auto;
   width: auto;
-  padding: 0.4rem 0.75rem;
-  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
   box-shadow: 0 2px 5px rgba(2, 35, 96, 0.08);
-  font-size: 0.82rem;
-  font-weight: 700;
-  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
 }
 
 .workflow-step-button.workflow-action-button:hover:not(:disabled) {
@@ -934,12 +962,12 @@ textarea.auth-input {
   flex: 0 0 auto;
   width: auto;
   min-width: 9rem;
-  padding: 0.55rem 0.95rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.85rem;
   border-color: transparent;
-  border-radius: 999px;
+  border-radius: 8px;
   background: rgba(2, 35, 96, 0.06);
   color: #526078;
-  font-size: 0.8rem;
   transition: color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -962,7 +990,6 @@ textarea.auth-input {
 
 .clearance-view-button {
   border-color: #cbd8ee;
-  border-radius: 999px !important;
   background: #f1f5fb;
   color: var(--imperial-blue);
 }
@@ -982,12 +1009,51 @@ textarea.auth-input {
   flex: 0 0 auto;
   width: auto;
   min-width: auto;
-  padding: 0.4rem 0.75rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
   font-weight: 700;
   box-sizing: border-box;
   transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.btn-primary:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled),
+.btn-danger:hover:not(:disabled),
+.workflow-step-button:hover:not(:disabled),
+.student-records-back-button:hover:not(:disabled),
+.student-invalidation-cancel:hover:not(:disabled),
+.clearance-comment-cancel:hover:not(:disabled),
+.clearance-comment-confirm-danger:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(2, 35, 96, 0.14);
+}
+
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-danger:focus-visible,
+.workflow-step-button:focus-visible,
+.student-records-back-button:focus-visible,
+.student-invalidation-cancel:focus-visible,
+.clearance-comment-cancel:focus-visible,
+.clearance-comment-confirm-danger:focus-visible {
+  outline: 3px solid var(--honey-bronze);
+  outline-offset: 2px;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled,
+.workflow-step-button:disabled,
+.student-records-back-button:disabled,
+.student-invalidation-cancel:disabled,
+.clearance-comment-cancel:disabled,
+.clearance-comment-confirm-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
 }
 
 .clearance-review-button:hover:not(:disabled),
@@ -1614,15 +1680,15 @@ textarea.auth-input {
 }
 
 .clearance-comment-actions > button {
-  min-height: 2.75rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: 7px;
-  font-size: 0.86rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
 .clearance-comment-cancel {
-  border: 2px solid var(--imperial-blue);
+  border: 1px solid var(--border-light);
   background: #fff;
   color: var(--imperial-blue);
 }
@@ -1644,6 +1710,8 @@ textarea.auth-input {
 .clearance-comment-actions > button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+  transform: none;
+  box-shadow: none;
 }
 
 .clearance-verification-confirm {

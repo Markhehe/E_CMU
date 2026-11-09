@@ -17,7 +17,13 @@ function formatCurrency(amount, currency = 'PHP') {
   }).format(amount);
 }
 
-const RequestDetailsModal = ({ isOpen, onClose, request, onOpenStudent }) => {
+const RequestDetailsModal = ({
+  isOpen,
+  onClose,
+  request,
+  onOpenStudent,
+  showAssignment = false,
+}) => {
   if (!request) return null;
 
   const studentIdentifier =
@@ -151,6 +157,26 @@ const RequestDetailsModal = ({ isOpen, onClose, request, onOpenStudent }) => {
             <StatusBadge status={request.status} />
           </span>
         </div>
+
+        {showAssignment && ['fulfilled', 'rejected'].includes(request.rawStatus) ? (
+          <div className="detail-row" style={rowStyle}>
+            <span style={labelStyle}>
+              {request.rawStatus === 'fulfilled' ? 'Fulfilled by' : 'Rejected by'}
+            </span>
+            <span style={valueStyle}>
+              {request.terminalActionName || 'Not recorded'}
+            </span>
+          </div>
+        ) : showAssignment && (
+          <div className="detail-row" style={rowStyle}>
+            <span style={labelStyle}>Assigned Staff</span>
+            <span style={valueStyle}>
+              {request.assignedTo == null
+                ? 'Unassigned'
+                : request.assignedName || 'Registrar staff member'}
+            </span>
+          </div>
+        )}
 
         {request.etaAt && !['ready_for_pickup', 'ready_for_retrieval', 'ready'].includes(request.rawStatus) && (
           <div className="detail-row" style={rowStyle}>

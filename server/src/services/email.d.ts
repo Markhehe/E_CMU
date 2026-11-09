@@ -8,6 +8,16 @@ export function sendPasswordResetCodeEmail(input: {
   fullName: string;
   code: string;
 }): Promise<void>;
+export function sendStudentRegistrationCodeEmail(input: {
+  email: string;
+  fullName: string;
+  code: string;
+}): Promise<void>;
+export function sendStudentLoginCodeEmail(input: {
+  email: string;
+  fullName: string;
+  code: string;
+}): Promise<void>;
 
 export function sendReadyForPickupEmail(input: {
   email: string;
@@ -34,4 +44,12 @@ export function sendPaymentReceivedEmail(input: {
   reference: string | null;
   paidAt: string;
   receiptDataUrl?: string;
+}): Promise<void>;
+
+export function sendPaymentProofRejectedEmail(input: {
+  email: string;
+  fullName: string;
+  documentName: string;
+  requestCode: string;
+  reason: string;
 }): Promise<void>;

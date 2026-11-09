@@ -32,8 +32,8 @@
 
 .registrar-staff-form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
-  align-items: end;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(12rem, 1fr);
+  align-items: start;
   gap: 1rem;
   padding: 0 1rem 1rem;
 }
@@ -53,6 +53,8 @@
 }
 
 .registrar-staff-form .btn-primary {
+  align-self: start;
+  margin-top: 1.45rem;
   min-height: 2.8rem;
 }
 
@@ -102,6 +104,10 @@
 @media (max-width: 700px) {
   .registrar-staff-form {
     grid-template-columns: 1fr;
+  }
+
+  .registrar-staff-form .btn-primary {
+    margin-top: 0;
   }
 
   .registrar-staff-actions-heading,

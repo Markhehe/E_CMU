@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { pool } from "../../db/pool.js";
+import { writeAuditLog } from "../../services/audit-log.js";
 
 const router = Router();
 const adminOnly = [requireAuth, requireRole("admin", "administrator")];
@@ -65,6 +66,13 @@ router.post("/", ...adminOnly, async (req, res, next) => {
       "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)",
       [staff.id, role.rows[0].id],
     );
+    await writeAuditLog(client, {
+      actorId: req.user!.id,
+      action: "registrar_staff.created",
+      entityType: "user",
+      entityId: String(staff.id),
+      metadata: { email: staff.email },
+    });
     await client.query("COMMIT");
     return res.status(201).json({ staff });
   } catch (error) {
@@ -85,8 +93,11 @@ router.patch("/:id", ...adminOnly, async (req, res, next) => {
     return res.status(400).json({ error: "Invalid staff account update." });
   }
 
+  let client;
   try {
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE users AS account
        SET active = $1, updated_at = NOW()
        WHERE account.id = $2
@@ -102,51 +113,18 @@ router.patch("/:id", ...adminOnly, async (req, res, next) => {
       [parsed.data.active, id.data],
     );
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Registrar staff account not found." });
-    }
-    return res.json({ staff: result.rows[0] });
-  } catch (error) {
-    return next(error);
-  }
-});
-
-router.delete("/:id", ...adminOnly, async (req, res, next) => {
-  const id = userIdSchema.safeParse(req.params.id);
-  if (!id.success) {
-    return res.status(400).json({ error: "Invalid staff account ID." });
-  }
-
-  let client;
-  try {
-    client = await pool.connect();
-    await client.query("BEGIN");
-    const account = await client.query(
-      `SELECT account.id
-       FROM users AS account
-       INNER JOIN user_roles AS assignment ON assignment.user_id = account.id
-       INNER JOIN roles AS account_role ON account_role.id = assignment.role_id
-       WHERE account.id = $1
-         AND account_role.name = 'registrar_staff'
-       FOR UPDATE OF account`,
-      [id.data],
-    );
-    if (account.rowCount === 0) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Registrar staff account not found." });
     }
-
-    await client.query(
-      "UPDATE users SET active = FALSE, updated_at = NOW() WHERE id = $1",
-      [id.data],
-    );
-    await client.query(
-      `DELETE FROM user_roles
-       WHERE user_id = $1
-         AND role_id = (SELECT id FROM roles WHERE name = 'registrar_staff')`,
-      [id.data],
-    );
+    await writeAuditLog(client, {
+      actorId: req.user!.id,
+      action: parsed.data.active ? "registrar_staff.restored" : "registrar_staff.suspended",
+      entityType: "user",
+      entityId: String(id.data),
+      metadata: { active: parsed.data.active },
+    });
     await client.query("COMMIT");
-    return res.status(204).end();
+    return res.json({ staff: result.rows[0] });
   } catch (error) {
     if (client) await client.query("ROLLBACK");
     return next(error);

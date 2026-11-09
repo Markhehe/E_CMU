@@ -9,16 +9,14 @@ import RequestDetailsModal from '../../components/ui/RequestDetailsModal';
 import RequestCommentsModal from '../../components/ui/RequestCommentsModal';
 import TableSkeleton from '../../components/ui/TableSkeleton';
 import TableEmptyState from '../../components/ui/TableEmptyState';
-import RequestDisplaySelect from '../../components/ui/RequestDisplaySelect';
 import RequestPagination from '../../components/ui/RequestPagination';
-import { useRequestDisplay } from '../../hooks/useRequestDisplay';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Extracted Modals
 import WalkInRequestModal from './WalkInRequestModal';
 import PaymentConfirmationModal from './modals/PaymentConfirmationModal';
 import ChangeStatusModal from './modals/ChangeStatusModal';
-import DiscardRequestModal from './modals/DiscardRequestModal';
+import RejectRequestModal from './modals/RejectRequestModal';
 import ViewReceiptModal from './modals/ViewReceiptModal';
 import RequestEtaModal from './modals/RequestEtaModal';
 
@@ -37,24 +35,30 @@ const REQUEST_STATUS_SUMMARY = [
 function RegistrarDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isRegistrarAdmin } = useAuth();
+  const { isRegistrarAdmin, currentUser } = useAuth();
   const appliedNotificationFilterKey = useRef(null);
   
   const {
     requests,
-    allRequests,
     isLoading,
     searchTerm,
     setSearchTerm,
     statusFilter,
     setStatusFilter,
-    changeRequestStatus,
+    currentPage,
+    setCurrentPage,
+    requestsPerPage,
+    totalPages,
+    totalRequests,
+    statusCounts,
     showFulfilledRequests,
     setShowFulfilledRequests,
     showRejectedRequests,
     setShowRejectedRequests,
+    changeRequestStatus,
     reviewAsRegistrar,
     confirmPayment,
+    rejectPaymentProof,
     startRequestProcessing,
     updateRequestEta,
     markReadyForPickup,
@@ -63,23 +67,24 @@ function RegistrarDashboard() {
     sortOption,
     setSortOption,
     refreshRequests,
-  } = useRequests();
+  } = useRequests({ registrarDashboard: true });
 
-  const requestStatusCounts = useMemo(() => {
-    const counts = Object.fromEntries(REQUEST_STATUS_SUMMARY.map(({ status }) => [status, 0]));
-    allRequests.forEach((request) => {
-      const status = request.status?.toUpperCase();
-      if (Object.hasOwn(counts, status)) counts[status] += 1;
-    });
-    return counts;
-  }, [allRequests]);
+  const requestStatusCounts = useMemo(() => ({
+    'PENDING REVIEW': Number(statusCounts.pending_review || 0),
+    'PENDING PAYMENT': Number(statusCounts.pending_payment || 0),
+    PAID: Number(statusCounts.paid || 0),
+    PROCESSING: Number(statusCounts.processing || 0),
+    OVERDUE: Number(statusCounts.overdue || 0),
+    'READY FOR PICKUP': Number(statusCounts.ready_for_pickup || 0),
+    'ON HOLD': Number(statusCounts.on_hold || 0),
+  }), [statusCounts]);
 
   const { openMenuId, setOpenMenuId, menuCoords, toggleMenu } = useActionMenu();
   
   const [viewingRequest, setViewingRequest] = useState(null);
   const [viewingReceiptRequest, setViewingReceiptRequest] = useState(null);
   const [commentingRequest, setCommentingRequest] = useState(null);
-  const [requestToDiscard, setRequestToDiscard] = useState(null);
+  const [requestToReject, setRequestToReject] = useState(null);
   const [requestToChangeStatus, setRequestToChangeStatus] = useState(null);
   const [paymentConfirmationRequest, setPaymentConfirmationRequest] = useState(null);
   const [etaDialog, setEtaDialog] = useState(null);
@@ -90,7 +95,8 @@ function RegistrarDashboard() {
 
   useEffect(() => {
     setSearchTerm(debouncedSearch);
-  }, [debouncedSearch, setSearchTerm]);
+    setCurrentPage(1);
+  }, [debouncedSearch, setCurrentPage, setSearchTerm]);
 
   useEffect(() => {
     const requestedFilter = location.state?.registrarStatusFilter;
@@ -100,21 +106,16 @@ function RegistrarDashboard() {
     ) {
       appliedNotificationFilterKey.current = location.key;
       setStatusFilter(requestedFilter);
+      setCurrentPage(1);
     }
-  }, [location.key, location.state, setStatusFilter]);
+  }, [location.key, location.state, setCurrentPage, setStatusFilter]);
 
   const activeMenuRequest = requests.find((req) => req.id === openMenuId);
-
-  const {
-    mode,
-    setMode,
-    visibleRequests,
-    currentPage,
-    totalPages,
-    requestsPerPage,
-    setCurrentPage,
-    tableWrapperRef,
-  } = useRequestDisplay(requests, 'registrar', 5, 'pagination');
+  const isRequestReadOnly = (request) => Boolean(
+    request.assignedTo
+    && request.assignedTo !== String(currentUser?.id)
+    && !isRegistrarAdmin,
+  );
 
   // --- Workflow Actions ---
   const handleRegistrarReview = async (id, decision) => {
@@ -170,13 +171,9 @@ function RegistrarDashboard() {
                 className={`registrar-request-summary-item${isActive ? ' is-active' : ''}`}
                 key={status}
                 aria-pressed={isActive}
-                onClick={() => setStatusFilter((prev) => (prev === status ? 'ALL' : status))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setStatusFilter((prev) => (prev === status ? 'ALL' : status));
-                  }
-                }}
+                onClick={() => setStatusFilter((previous) => (
+                  previous === status ? 'ALL' : status
+                ))}
               >
                 <span className="registrar-request-summary-count">{isLoading ? '—' : requestStatusCounts[status]}</span>
                 <span className="registrar-request-summary-label">{label}</span>
@@ -203,7 +200,10 @@ function RegistrarDashboard() {
             <input
               type="checkbox"
               checked={showFulfilledRequests}
-              onChange={(e) => setShowFulfilledRequests(e.target.checked)}
+              onChange={(e) => {
+                setShowFulfilledRequests(e.target.checked);
+                setCurrentPage(1);
+              }}
               disabled={statusFilter === 'FULFILLED'}
             />
             <span>Show fulfilled</span>
@@ -212,23 +212,33 @@ function RegistrarDashboard() {
             <input
               type="checkbox"
               checked={showRejectedRequests}
-              onChange={(e) => setShowRejectedRequests(e.target.checked)}
+              onChange={(e) => {
+                setShowRejectedRequests(e.target.checked);
+                setCurrentPage(1);
+              }}
               disabled={statusFilter === 'REJECTED'}
             />
             <span>Show rejected</span>
           </label>
-          
+
           <select value={sortOption} onChange={(e) => {
             const nextSortOption = e.target.value;
             setSortOption(nextSortOption);
-            if (nextSortOption === 'STATUS_ASC') setStatusFilter('ALL');
+            setCurrentPage(1);
           }} className="toolbar-select">
             <option value="DATE_DESC">Sort: Date (Newest)</option>
             <option value="DATE_ASC">Sort: Date (Oldest)</option>
             <option value="STATUS_ASC">Sort: Status (Action Needed)</option>
           </select>
 
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="toolbar-select">
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="toolbar-select"
+          >
             <option value="ALL">Filter: All Statuses</option>
             <option value="PENDING REVIEW">Filter: Pending review</option>
             <option value="PENDING PAYMENT">Filter: Pending payment</option>
@@ -241,16 +251,14 @@ function RegistrarDashboard() {
             <option value="FULFILLED">Filter: Fulfilled</option>
             <option value="REJECTED">Filter: Rejected</option>
           </select>
-
-          <RequestDisplaySelect mode={mode} onChange={setMode} />
         </div>
       </div>
 
       {/* 3. The Table */}
       <p className="table-scroll-hint">Scroll sideways to view all columns</p>
       <div
-        ref={tableWrapperRef}
-        className={`request-table-wrapper${mode === 'pagination' ? ' is-paginated' : ''}`}
+        id="registrar-request-table"
+        className="request-table-wrapper"
         tabIndex={0}
         role="region"
         aria-label="Requests table. Scroll horizontally to view all columns."
@@ -270,7 +278,7 @@ function RegistrarDashboard() {
             {isLoading ? (
               <TableSkeleton columns={6} rows={5} />
             ) : requests.length > 0 ? (
-              visibleRequests.map((req) => (
+              requests.map((req) => (
                 <tr
                   key={req.id}
                   className="request-row-clickable"
@@ -324,38 +332,38 @@ function RegistrarDashboard() {
                   <td className="actions-cell">
                     <div className="workflow-inline-actions">
                       {['pending_review', 'on_hold'].includes(req.rawStatus) && (
-                        <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); handleRegistrarReview(req.id, 'approved'); }}>
+                        <button type="button" className="workflow-step-button is-positive" disabled={isRequestReadOnly(req)} onClick={(e) => { e.stopPropagation(); handleRegistrarReview(req.id, 'approved'); }}>
                           Approve
                         </button>
                       )}
 
                       {req.rawStatus === 'pending_payment' && (
-                        <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); setPaymentConfirmationRequest(req); }}>
+                        <button type="button" className="workflow-step-button is-positive" disabled={isRequestReadOnly(req)} onClick={(e) => { e.stopPropagation(); setPaymentConfirmationRequest(req); }}>
                           Confirm Cash Receipt
                           {req.receiptUrl && req.requestCopyUrl && <span className="website-payment-proof-dot" />}
                         </button>
                       )}
 
                       {req.rawStatus === 'paid' && (
-                        <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); setEtaDialog({ request: req, isUpdating: false }); }}>
+                        <button type="button" className="workflow-step-button is-positive" disabled={isRequestReadOnly(req)} onClick={(e) => { e.stopPropagation(); setEtaDialog({ request: req, isUpdating: false }); }}>
                           Start Processing
                         </button>
                       )}
 
                       {['processing', 'overdue'].includes(req.rawStatus) && (
-                        <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); handleReadyForPickup(req.id); }}>
+                        <button type="button" className="workflow-step-button is-positive" disabled={isRequestReadOnly(req)} onClick={(e) => { e.stopPropagation(); handleReadyForPickup(req.id); }}>
                           Ready For Pickup
                         </button>
                       )}
 
                       {['processing', 'overdue'].includes(req.rawStatus) && (
-                        <button type="button" className="workflow-step-button workflow-action-button" onClick={(e) => { e.stopPropagation(); setEtaDialog({ request: req, isUpdating: true }); }}>
+                        <button type="button" className="workflow-step-button workflow-action-button" disabled={isRequestReadOnly(req)} onClick={(e) => { e.stopPropagation(); setEtaDialog({ request: req, isUpdating: true }); }}>
                           Update ETA
                         </button>
                       )}
 
                       {['ready_for_pickup', 'ready_for_retrieval', 'ready'].includes(req.rawStatus) && (
-                        <button type="button" className="workflow-step-button is-positive" onClick={(e) => { e.stopPropagation(); handlePickup(req.id); }}>
+                        <button type="button" className="workflow-step-button is-positive" disabled={isRequestReadOnly(req)} onClick={(e) => { e.stopPropagation(); handlePickup(req.id); }}>
                           Record Pickup
                         </button>
                       )}
@@ -363,6 +371,7 @@ function RegistrarDashboard() {
                       <button
                         type="button"
                         className={`workflow-step-button workflow-action-button${req.hasUnreadComments ? ' has-unread-comments' : ''}`}
+                        disabled={isRequestReadOnly(req)}
                         onClick={(e) => { e.stopPropagation(); setCommentingRequest(req); }}
                       >
                         Comment
@@ -389,12 +398,12 @@ function RegistrarDashboard() {
       </div>
 
       {/* 4. Pagination */}
-      {!isLoading && mode === 'pagination' && (
+      {!isLoading && (
         <RequestPagination
           currentPage={currentPage}
           totalPages={totalPages}
           requestsPerPage={requestsPerPage}
-          totalRequests={requests.length}
+          totalRequests={totalRequests}
           onPageChange={setCurrentPage}
         />
       )}
@@ -403,7 +412,7 @@ function RegistrarDashboard() {
       {openMenuId && activeMenuRequest && (
         <div className="actions-menu-fixed" style={menuCoords}>
           <button type="button" onClick={() => { setViewingRequest(activeMenuRequest); setOpenMenuId(null); }}>View Details</button>
-          {(isRegistrarAdmin || activeMenuRequest.rawStatus !== 'fulfilled') && (
+          {!isRequestReadOnly(activeMenuRequest) && (isRegistrarAdmin || activeMenuRequest.rawStatus !== 'fulfilled') && (
             <button type="button" onClick={() => { setRequestToChangeStatus(activeMenuRequest); setOpenMenuId(null); }}>Change status</button>
           )}
           
@@ -411,17 +420,17 @@ function RegistrarDashboard() {
             <button type="button" onClick={() => { setViewingReceiptRequest(activeMenuRequest); setOpenMenuId(null); }}>View Receipt</button>
           )}
 
-          {['pending_review', 'on_hold', 'pending_payment', 'clearance_review', 'paid', 'processing', 'overdue', 'ready_for_pickup'].includes(activeMenuRequest.rawStatus) && (
+          {!isRequestReadOnly(activeMenuRequest) && ['pending_review', 'on_hold', 'pending_payment', 'clearance_review', 'paid', 'processing', 'overdue', 'ready_for_pickup'].includes(activeMenuRequest.rawStatus) && (
             <>
               <div className="actions-menu-divider" />
               <button type="button" onClick={() => handleRegistrarReview(openMenuId, 'needs_information')}>Put on Hold</button>
-              <button type="button" className="text-danger" onClick={() => { setRequestToDiscard(activeMenuRequest); setOpenMenuId(null); }}>
-                Discard Request
+              <button type="button" className="text-danger" onClick={() => { setRequestToReject(activeMenuRequest); setOpenMenuId(null); }}>
+                Reject Request
               </button>
             </>
           )}
 
-          {activeMenuRequest.rawStatus === 'ready_for_pickup' && (
+          {!isRequestReadOnly(activeMenuRequest) && activeMenuRequest.rawStatus === 'ready_for_pickup' && (
             <>
               <div className="actions-menu-divider" />
               <button type="button" onClick={() => handleReadyForPickup(openMenuId)}>Resend Pickup Email</button>
@@ -431,7 +440,7 @@ function RegistrarDashboard() {
       )}
 
       {/* 6. Isolated Modals */}
-      <RequestDetailsModal isOpen={!!viewingRequest} onClose={() => setViewingRequest(null)} request={viewingRequest} onOpenStudent={openStudentRecord} />
+      <RequestDetailsModal isOpen={!!viewingRequest} onClose={() => setViewingRequest(null)} request={viewingRequest} onOpenStudent={openStudentRecord} showAssignment />
       <RequestCommentsModal isOpen={!!commentingRequest} onClose={() => setCommentingRequest(null)} request={commentingRequest} onCommentsRead={markCommentsRead} />
       <WalkInRequestModal isOpen={isWalkInModalOpen} onClose={() => setIsWalkInModalOpen(false)} onCreated={() => refreshRequests()} />
       
@@ -444,16 +453,18 @@ function RegistrarDashboard() {
       />
       
       <PaymentConfirmationModal 
+        key={paymentConfirmationRequest?.id || 'closed'}
         isOpen={!!paymentConfirmationRequest} 
         onClose={() => setPaymentConfirmationRequest(null)} 
         request={paymentConfirmationRequest} 
         onSubmit={confirmPayment} 
+        onReject={rejectPaymentProof}
       />
       
-      <DiscardRequestModal 
-        isOpen={!!requestToDiscard} 
-        onClose={() => setRequestToDiscard(null)} 
-        request={requestToDiscard} 
+      <RejectRequestModal
+        isOpen={!!requestToReject}
+        onClose={() => setRequestToReject(null)}
+        request={requestToReject}
         onSubmit={handleRegistrarReview} 
       />
       
